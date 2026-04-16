@@ -77,5 +77,5 @@ src/
 
 프로젝트 관련 정리 내용
 
-👉 RAG 개념 정리 - https://yooninging.tistory.com/124
-👉 LangChain의 개념 - https://ejji.tistory.com/20
+👉 RAG 개념 정리 - https://yooninging.tistory.com/124  
+👉 LangChain의 개념 - https://ejji.tistory.com/20  
