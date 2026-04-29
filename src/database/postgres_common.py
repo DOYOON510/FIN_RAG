@@ -46,6 +46,7 @@ class PostgresInsert:
         :param data_list: INSERT 할 데이터 리스트
                - [{"collect_id": "C26040701", "data_type": "NEWS", ...},
                   {"collect_id": "C26040702", "data_type": "NEWS", ...}] 형식
+        :param collect_type: 데이터 수집 타입 ("BULK" or "INCR")
         :return: 성공 여부 (bool)
         """
         data_list = self.common_util.check_and_make_list(data_list)
