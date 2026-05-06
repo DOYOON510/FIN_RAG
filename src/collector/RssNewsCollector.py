@@ -69,8 +69,8 @@ class RssNewsCollector:
                     )
                     res.raise_for_status()
 
-                    feed = feedparser.parse(res.content)
-                    entries = feed.entries[:self.max_items_per_feed]
+                    feed = feedparser.parse(res.content)    # xml -> 파이썬 객체로 변환
+                    entries = feed.entries[:self.max_items_per_feed]    # 최대 개수 제한해서 가져옴.
 
                     if not entries:
                         self.logger.debug(
@@ -255,7 +255,7 @@ if __name__ == "__main__":
 
     collector = RssNewsCollector(
         sleep_sec=0.5,
-        max_items_per_feed=1
+        max_items_per_feed=50    # rss feed당 가져올 기사 개수
     )
 
     data_list = collector.run(

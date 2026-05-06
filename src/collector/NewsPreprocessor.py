@@ -52,7 +52,7 @@ class NewsPreprocessor:
             return None
 
         try:
-            dt = parser.parse(date_str)
+            dt = parser.parse(date_str) #datetime 객체로 바꿔줌
             return dt.strftime("%Y-%m-%d")
         except Exception:
             return None

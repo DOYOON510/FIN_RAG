@@ -1,24 +1,30 @@
-
 class CommonConstant:
     """크롤러 전역 설정(상수) 보관 클래스"""
     table_mapping_dict = {
-        # "t_data_collect_log": {
-        #     "table_id": "collect_id", "table_code": "C", "padding_n":2, "prefix_col_list":None, "prefix_date":None
-        # },
+        "t_data_collect_log": {
+            "table_id": "collect_id", "table_code": "C", "padding_n": 2, "prefix_col_list": None, "prefix_date": None
+        },
         "t_news_data": {
-            "table_id": "news_id", "table_code": "N", "padding_n": 2,
-            "prefix_col_list":["source_type", "publisher_name"], "prefix_date": "published_date"
+            "table_id": "news_id", "table_code": "N", "padding_n": 4,
+            "prefix_col_list": ["source_type", "publisher_name"], "prefix_date": "published_date"
         },
         "t_stock_price_data": {
-            "table_id": "stock_id", "table_code": "S", "padding_n": 4, "prefix_col_list":None, "prefix_date": "trade_date"
+            "table_id": "stock_id", "table_code": "S", "padding_n": 4, "prefix_col_list": None,
+            "prefix_date": "trade_date"
         },
     }
+
+
+class StockConstant:
+    stock_url = "https://openapi.koreainvestment.com:9443/oauth2/tokenP"
+
     boannews_api = "https://www.boannews.com"
     # # OUT_DIR = r"\\limenas7f\P2025_01_KSPO\03.공단 공통업무 AI 학습용 데이터셋 및 챗봇 구축\data_access\ALIO"
     # OUT_DIR = r"C:\Users\user\Desktop\ejjee\2025\KSPO\251120"
     # REPORT_TYPE = "43006"  # 내부·외부감사결과 고정
     # START_YEAR = 2021  # 기준일 연도가 이 값 이상만 수집
     # SLEEP_BETWEEN_REQ = 0.4  # 요청 간 딜레이(초)
+
 
 class NewsCollectorConfig:
     # =========================
@@ -28,34 +34,57 @@ class NewsCollectorConfig:
         "경제": [
             "금리", "기준금리", "인플레이션", "CPI", "GDP",
             "경기침체", "고용지표", "실업률", "국채금리", "통화정책",
+            "환율", "원달러환율", "소비자물가", "생산자물가", "PPI",
+            "연준", "FOMC", "양적완화", "긴축", "스태그플레이션", "유가", "원자재",
+        ],
+
+        "증권": [
+            "코스피", "코스닥", "나스닥", "S&P500", "증시",
+            "주가", "공매도", "IPO", "PER", "실적발표",
+            "시가총액", "배당", "배당금", "EPS", "PBR",
+            "테마주", "밸류업", "ETF", "선물", "옵션",
+        ],
+
+        "IT": [
+            "AI", "반도체", "HBM", "파운드리", "클라우드",
+            "데이터센터", "빅테크", "자율주행", "전기차", "2차전지",
+            "생성형AI", "LLM", "챗GPT", "GPU", "엔비디아",
+            "삼성전자", "SK하이닉스", "메타버스", "로봇", "사이버보안",
+            "오픈AI", "애플", "테슬라", "모빌리티", "플랫폼",
         ]
-        # "증권": [
-        #     "코스피", "코스닥", "나스닥", "S&P500", "증시",
-        #     "주가", "공매도", "IPO", "PER", "실적발표",
-        # ],
-        # "IT": [
-        #     "AI", "반도체", "HBM", "파운드리", "클라우드",
-        #     "데이터센터", "빅테크", "자율주행", "전기차", "2차전지",
-        # ],
         # "부동산": [
         #     "부동산", "아파트", "주택시장", "전세", "월세",
         #     "정책", "분양", "청약", "재건축", "LTV",
+        #     "재개발", "공시지가", "종부세", "취득세", "임대차",
+        #     "미분양", "부동산PF", "금리인상", "전세사기", "주택공급",
         # ],
+        #
         # "정치": [
         #     "정부정책", "규제", "법안", "국회", "대통령", "정부",
         #     "선거", "정책발표", "세금", "예산안", "경제정책",
+        #     "추경", "감세", "증세", "행정수도", "대외정책",
+        #     "외교", "한미관계", "정당", "총선", "대선",
         # ],
+        #
         # "국제": [
         #     "경제", "미국", "환율", "원달러", "달러인덱스",
         #     "유가", "WTI", "무역", "관세", "공급망",
+        #     "연준", "FOMC", "중국경제", "EU", "중동",
+        #     "우크라이나", "금리인상", "금리인하", "인플레이션", "글로벌증시",
         # ],
+        #
         # "사회": [
         #     "고용시장", "물가상승", "가계부채", "출산율", "인구감소", "고용", "물가",
         #     "청년실업", "노동시장", "최저임금", "임금상승", "복지정책",
+        #     "실업률", "비정규직", "청년정책", "주거난", "고령화",
+        #     "사교육", "의료개혁", "건강보험", "산업재해", "복지예산",
         # ],
+        #
         # "주요 기업": [
         #     "삼성전자", "SK하이닉스", "엔비디아", "애플", "마이크로소프트",
         #     "테슬라", "아마존", "구글", "TSMC", "현대차",
+        #     "넷플릭스", "오픈AI", "메타", "카카오", "네이버",
+        #     "LG에너지솔루션", "포스코", "인텔", "AMD", "퀄컴",
         # ]
     }
 

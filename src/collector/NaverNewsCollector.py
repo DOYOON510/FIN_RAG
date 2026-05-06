@@ -12,7 +12,6 @@ from src.collector.NewsPreprocessor import NewsPreprocessor
 from src.collector.ArticleFetcher import ArticleFetcher
 from src.database.postgres_common import PostgresInsert
 
-# .env 파일 로드 (API 키 등)
 load_dotenv()
 
 
@@ -33,8 +32,8 @@ class NaverNewsCollector:
     CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
 
     # API 요청 단위 및 최대 수집 개수
-    DISPLAY_PER_CALL = 100
-    MAX_ITEMS_PER_KEYWORD = 100
+    DISPLAY_PER_CALL = 100  # API 1회 호출당 가져올 기사 개수
+    MAX_ITEMS_PER_KEYWORD = 1000  # 키워드별 최대 수집 개수
 
     def __init__(self, start_date: str, end_date: str):
         """
@@ -66,6 +65,7 @@ class NaverNewsCollector:
             "X-Naver-Client-Secret": self.CLIENT_SECRET,
         }
 
+        # API에 전달할 실제 요청 데이터
         params = {
             "query": query,
             "display": self.DISPLAY_PER_CALL,
@@ -76,12 +76,15 @@ class NaverNewsCollector:
         try:
             self.logger.debug(f"Naver API 요청: query={query}, start={start}, sort={sort}")
 
+            # HTTP GET 요청 보내는 함수
             response = requests.get(
                 url,
                 headers=headers,
                 params=params,
                 timeout=10
             )
+
+            # HTTP 에러 발생 시 예외 발생 (200 : 정상, 이외 : Exceptin 발생)
             response.raise_for_status()
 
             return response.json()
@@ -110,10 +113,10 @@ class NaverNewsCollector:
         # 최대 1000개 제한 + 설정한 최대 수집 개수 제한
         while start <= 1000 and len(news_list) < self.MAX_ITEMS_PER_KEYWORD:
 
-            data = self.get_naver_news(query=query, start=start)
+            data = self.get_naver_news(query=query, start=start)    # api 호출 결과를 data로 저장
             items = data.get("items", [])
 
-            # 결과 없으면 종료
+            # 결과(기사) 없으면 종료
             if not items:
                 break
 
@@ -307,8 +310,8 @@ class NaverNewsCollector:
         links = self.collect_all_keywords(keywords_by_category)
         self.logger.info(f"뉴스 링크 수집 완료: {len(links)}건")
 
-        articles = self.collect_article_contents(links)
-        data_list = self.build_data_list(articles)
+        articles = self.collect_article_contents(links) # 본문 수집
+        data_list = self.build_data_list(articles)  # 최종 데이터 변환
 
         self.logger.info(f"네이버 뉴스 수집 완료: 최종 {len(data_list)}건")
 
@@ -320,8 +323,8 @@ class NaverNewsCollector:
 # =========================
 if __name__ == "__main__":
     collector = NaverNewsCollector(
-        start_date="2026-04-25",
-        end_date="2026-05-01"
+        start_date="2026-01-01",
+        end_date="2026-05-06"
     )
 
     data_list = collector.run(NewsCollectorConfig.KEYWORDS_BY_CATEGORY)
