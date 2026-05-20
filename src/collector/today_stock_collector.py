@@ -4,12 +4,12 @@ from datetime import datetime
 
 from src.common.common_const import StockConstant
 from src.config.env_config import APIConstants
+from src.collector.origin_stock_collector import OriginStockCollector
+
 from src.common.setup_log import SetupLogger
 
 from src.database.connect_postgres import PostgresDB
 from src.database.postgres_common import PostgresInsert
-
-from HN.Stock.StockCollector import StockCollector
 
 
 class TodayStockCollector:
@@ -40,7 +40,7 @@ class TodayStockCollector:
         self.postgres_insert = PostgresInsert()
 
         # 기존 ticker 조회 로직 재사용 (t_ticker_info 기준)
-        self.stock_collector = StockCollector()
+        self.stock_collector = OriginStockCollector()
 
         # API URL
         self.token_url = StockConstant.token_url
@@ -97,7 +97,7 @@ class TodayStockCollector:
     # =========================
     # 2. 종목 현재가 조회
     # =========================
-    def get_today_price(self, ticker_code, ticker_name):
+    def get_today_price(self, access_token, ticker_code, ticker_name):
         """
         단일 종목 현재가 조회
 
@@ -117,7 +117,7 @@ class TodayStockCollector:
 
         headers = {
             "content-type": "application/json; charset=utf-8",
-            "authorization": f"Bearer {self.token}",
+            "authorization": f"Bearer {access_token}",
             "appkey": self.api_key,
             "appsecret": self.api_secret,
             "tr_id": "FHKST01010100",
@@ -135,13 +135,24 @@ class TodayStockCollector:
             params=params
         )
 
-        if res.status_code != 200:
-            raise Exception(f"현재가 조회 실패 - {res.text}")
+        if res.status_code != 200: #성공이 아니라면
+            raise Exception(f"현재가 조회 실패 - {res.text}") #실패하면 예외를 발생시켜서 except로 넘기는 구조
 
         result = res.json()
 
-        if result.get("rt_cd") != "0":
-            raise Exception(f"현재가 조회 실패 - {result}")
+        rt_cd = result.get("rt_cd")
+        msg1 = result.get("msg1")
+
+        if rt_cd != "0": # 0이 아니라면 -> 실패라면
+            self.logger.error(f"[현재가 조회 실패] {ticker_code} {ticker_name} | msg={msg1}")
+
+
+            raise Exception(f"{ticker_code} {ticker_name} 현재가 조회 실패 - {msg1}")
+
+        #result 구조 : {"rt_cd": "0", 응답 상태 코드 0: 성공 그외 : 실패
+        #              "msg_cd": "AP00000", 메시지 코드
+        #              "msg1": "정상처리되었습니다",
+        #              "output": { ... }}
 
         output = result.get("output", {})
 
@@ -173,6 +184,7 @@ class TodayStockCollector:
         """
 
         ticker_list = self.stock_collector.get_ticker_info()
+        access_token = self.token
 
         self.logger.info(f"총 {len(ticker_list)} 종목 현재가 수집 시작")
 
@@ -196,6 +208,7 @@ class TodayStockCollector:
 
             try:
                 result = self.get_today_price(
+                    access_token,
                     ticker_code,
                     ticker_name
                 )
@@ -210,7 +223,7 @@ class TodayStockCollector:
             except Exception as e:
 
                 self.logger.error(
-                    f"{ticker_code} {ticker_name} 실패 - {str(e)}"
+                    f"[현재가 수집 실패] {ticker_code} {ticker_name} | error={e}"
                 )
 
                 fail_list.append({
@@ -218,6 +231,8 @@ class TodayStockCollector:
                     "ticker_name": ticker_name,
                     "reason": str(e)
                 })
+
+
 
         # =========================
         # DB INSERT (한 번에 bulk)
