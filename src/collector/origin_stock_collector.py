@@ -9,32 +9,44 @@ from src.database.postgres_common import PostgresInsert
 
 class OriginStockCollector:
     """
-        =====================================
-        주식 일봉 데이터 수집 및 DB 적재 클래스
-        =====================================
+        주식 데이터 수집 및 DB 적재 클래스
 
         전체 흐름:
         1. ticker 목록 조회 (t_ticker_info 기준)
-        2. pykrx에서 월별(2026년 1월 ~ 5월 19일) OHLCV 데이터 수집
+        2. pykrx에서 2025년 12월 ~ 5월 22일 OHLCV 데이터 수집
         3. 데이터 전처리 (타입 변환 / 컬럼 rename / 메타데이터 추가)
         4. batch 단위로 DB 적재
-        """
+    """
 
     def __init__(self, start_date: str, end_date: str):
         """
-                logger + DB + insert 객체 초기화
+        logger + DB + insert 객체 초기화
+
+        param start_date: 수집 시작일 (예: "20251201")
+        param end_date:   수집 종료일 (예: "20260520")
+
         """
         self.logger = SetupLogger.get_logger()
         self.db = PostgresDB()
         self.postgres_insert = PostgresInsert()
         self.start_date = start_date
         self.end_date = end_date
-        """
-        (수정)
-        날짜 지정
-        """
 
     def get_pykrx_monthly_data(self, ticker: str):
+
+        """
+        pykrx에서 특정 ticker의 OHLCV 데이터를 수집하고 전처리하여 반환
+
+        처리 흐름:
+        1. pykrx API 호출 → OHLCV 데이터 수집
+        2. 숫자형 변환 (시가, 고가, 저가, 종가, 거래량)
+        3. 컬럼명 한글 → 영문 rename
+        4. 날짜 포맷 변환 (datetime → "YYYY-MM-DD" 문자열)
+        5. dict 리스트로 변환하여 반환
+
+        param ticker: 종목 코드 (예: "005930")
+        return: list[dict] 형태의 전처리된 OHLCV 데이터. 실패 또는 데이터 없을 시 []
+        """
 
         df = stock.get_market_ohlcv(self.start_date, self.end_date, ticker).reset_index()
 
@@ -59,19 +71,19 @@ class OriginStockCollector:
         df["trade_date"] = df["trade_date"].dt.strftime("%Y-%m-%d")
 
         return df.to_dict("records")
-    """
-    (수정)
-    get_market_ohlcv 라이브러리는 [날짜,시가,고가,저가,종가,거래량,등락률] 컬럼 나오는 것 확인됨
-    그래서 아래에 따로 ticker_code와 ticker_name source_type 넣는 것 유지
-    """
 
     #ticker 리스트 조회
     def get_ticker_info(self):
         """
-        DB에서 ticker 목록 조회
-        :return: list[dict] [{'ticker_name': '...', 'ticker_code': '...'}]
-        """
+        DB에서 수집 대상 ticker 목록 조회
 
+        처리 흐름:
+        1. t_ticker_info 테이블에서 ticker_code , ticker_name 종목 조회
+        2. ticker_sno 기준 오름차순 정렬
+        3. ticker_name, ticker_code 반환
+
+        :return: ticker_name 과 ticker_code가 담긴 리스트
+        """
         with self.db.get_postgres_db() as session:
             query = text("""
                 SELECT ticker_name, ticker_code
@@ -86,31 +98,27 @@ class OriginStockCollector:
             ]
 
     def insert_stock_data(self):
+
         """
-        전체 주식 데이터 수집 및 DB 적재 실행 함수
+        전체 주식 데이터 수집 및 DB insert 실행 함수
+
+        처리 흐름:
+        1. DB에서 ticker 목록 조회
+        2. ticker별 OHLCV 데이터 수집
+        3. ticker_code, ticker_name, source_type 메타데이터 추가
+        4. batch_size(100)마다 DB bulk insert
+        5. 잔여 데이터 최종 insert
+
         """
+
         start_time = time.time()
         ticker_list = self.get_ticker_info()[:1]
         self.logger.info(f"총 {len(ticker_list)}개 종목 수집을 시작합니다.")
 
         success_count = 0
-        """
-        (수정)
-        success_list가 아니라 success_count로 변경
-        has_error와 err_msg도 없애고 오류 발생시 except Exception as e로 넘어가 에러 로그 찍힘
-        """
         fail_list = []
         batch_result = []
         batch_size = 100
-
-        """
-        (수정)
-        기존: 월별(1월, 2월 ... 5월)로 나눠서 API 호출 및 삽입하는 방식
-            → 특정 월 누락 케이스를 대비한 예외처리 필요
-            
-        변경: start_date ~ end_date 날짜 범위를 한번에 지정하는 방식
-            → 종목 단위 성공/실패만 체크하면 되므로 예외처리 단순화
-        """
 
         for idx, ticker_info in enumerate(ticker_list):
             ticker_code = ticker_info['ticker_code']
@@ -181,5 +189,5 @@ class OriginStockCollector:
 
 
 if __name__ == "__main__":
-    collector = OriginStockCollector(start_date="20251201", end_date="20260520")
+    collector = OriginStockCollector(start_date="20251201", end_date="20260522")
     collector.insert_stock_data()

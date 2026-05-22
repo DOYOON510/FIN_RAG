@@ -16,11 +16,11 @@ class TodayStockCollector:
     """
     KIS API 기반 '실시간 현재가' 수집 클래스
 
-    역할:
+    전체 흐름:
     1. Access Token 발급
-    2. 종목별 현재가 조회
-    3. 전체 종목 수집
-    4. DB 저장 (batch insert)
+    2. t_ticker_info 기준 ticker 목록 조회
+    3. 종목별 현재가 API 호출 및 데이터 수집
+    4. 수집 결과 DB insert
     """
 
     def __init__(self):
@@ -39,8 +39,8 @@ class TodayStockCollector:
         self.db = PostgresDB()
         self.postgres_insert = PostgresInsert()
 
-        # 기존 ticker 조회 로직 재사용 (t_ticker_info 기준)
-        self.stock_collector = OriginStockCollector()
+        today = datetime.today().strftime("%Y%m%d")
+        self.stock_collector = OriginStockCollector(start_date=today, end_date=today)
 
         # API URL
         self.token_url = StockConstant.token_url
@@ -50,8 +50,7 @@ class TodayStockCollector:
         self.api_key = APIConstants.API_KEY
         self.api_secret = APIConstants.API_SECRET
 
-        # Access Token (초기 1회 발급)
-        self.token = self.get_access_token()
+
 
     # =========================
     # 1. Access Token 발급
@@ -60,16 +59,10 @@ class TodayStockCollector:
         """
         KIS API access token 발급
 
-        Input:
-            - appkey / appsecret
-
-        Output:
-            - access_token (str)
-
         흐름:
-        1. token API 호출
-        2. 응답 검증
-        3. access_token 반환
+        1. 한국투자증권 API 사용하여 호출
+        2. HTTP status 200 여부 검증 (실패 시 예외 발생)
+        3. 응답 JSON에서 access_token 추출 후 반환
         """
 
         data = {
@@ -173,22 +166,34 @@ class TodayStockCollector:
     # =========================
     def insert_today_stock_data(self):
         """
-        전체 종목 현재가 수집 후 DB 저장
+        단일 종목 현재가 조회 (KIS API)
 
         흐름:
-        1. ticker 목록 조회
-        2. 종목별 API 호출
-        3. 결과 누적 (all_result)
-        4. 실패/성공 분리
-        5. 마지막에 bulk insert
+        1. 현재가 API GET 호출
+        2. HTTP status 200 여부 검증 (실패 시 예외 발생)
+        3. 응답 rt_cd 검증 (0: 성공, 그 외: 실패 → 예외 발생)
+        4. output 필드에서 가격 데이터 추출 후 dict 리스트로 반환
+
+        Input:
+            - access_token: get_access_token()으로 발급받은 인증 토큰
+            - ticker_code : 종목 코드 (예: "005930")
+            - ticker_name : 종목명 (예: "삼성전자")
+
+        Output:
+            - list[dict] : DB insert용 현재가 데이터 1건
+
         """
 
-        ticker_list = self.stock_collector.get_ticker_info()
-        access_token = self.token
+        ticker_list = self.stock_collector.get_ticker_info()[:1]
+        access_token = self.get_access_token()
 
         self.logger.info(f"총 {len(ticker_list)} 종목 현재가 수집 시작")
 
-        success_list = []
+        success_count = 0
+        """
+        (수정)
+        success_list -> success_count로 변경
+        """
         fail_list = []
 
         # 전체 결과 누적 (batch insert용)
@@ -214,11 +219,7 @@ class TodayStockCollector:
                 )
 
                 all_result.extend(result)
-
-                success_list.append({
-                    "ticker_code": ticker_code,
-                    "ticker_name": ticker_name
-                })
+                success_count += 1
 
             except Exception as e:
 
@@ -231,8 +232,6 @@ class TodayStockCollector:
                     "ticker_name": ticker_name,
                     "reason": str(e)
                 })
-
-
 
         # =========================
         # DB INSERT (한 번에 bulk)
@@ -253,7 +252,7 @@ class TodayStockCollector:
         self.logger.info("========== 현재가 수집 완료 ==========")
 
         self.logger.info(
-            f"성공: {len(success_list)}건 / "
+            f"성공: {success_count}건 / "
             f"실패: {len(fail_list)}건 / "
             f"전체: {len(ticker_list)}건"
         )
