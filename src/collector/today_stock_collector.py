@@ -28,19 +28,19 @@ class TodayStockCollector:
         초기 설정
 
         구성 요소:
-        - logger: 로그 관리
-        - db: DB 커넥션
-        - postgres_insert: insert 유틸
-        - stock_collector: 기존 ticker 리스트 재사용
-        - token: KIS API 인증 토큰
+        param stock_collector: ticker 목록 조회 재사용 (OriginStockCollector)
+        param token_url      : KIS 토큰 발급 URL
+        param stock_url      : KIS 현재가 조회 URL
+        param api_key        : KIS API appkey
+        param api_secret     : KIS API appsecret
+
         """
 
         self.logger = SetupLogger.get_logger()
         self.db = PostgresDB()
         self.postgres_insert = PostgresInsert()
 
-        today = datetime.today().strftime("%Y%m%d")
-        self.stock_collector = OriginStockCollector(start_date=today, end_date=today)
+        self.stock_collector = OriginStockCollector()
 
         # API URL
         self.token_url = StockConstant.token_url
@@ -49,8 +49,6 @@ class TodayStockCollector:
         # API Key
         self.api_key = APIConstants.API_KEY
         self.api_secret = APIConstants.API_SECRET
-
-
 
     # =========================
     # 1. Access Token 발급
@@ -63,6 +61,8 @@ class TodayStockCollector:
         1. 한국투자증권 API 사용하여 호출
         2. HTTP status 200 여부 검증 (실패 시 예외 발생)
         3. 응답 JSON에서 access_token 추출 후 반환
+
+        return : access_token
         """
 
         data = {
@@ -94,18 +94,18 @@ class TodayStockCollector:
         """
         단일 종목 현재가 조회
 
-        Input:
-            - ticker_code: 종목 코드
-            - ticker_name: 종목명
-
-        Output:
-            - 현재가 데이터 리스트 (DB insert용 1 row)
-
         흐름:
         1. KIS API 호출
         2. 응답 검증
         3. 필요한 가격 데이터 추출
         4. dict 형태로 변환
+
+        :param access_token: get_access_token()으로 발급받은 인증 토큰
+        :param ticker_code : 종목 코드 (예시: "005930")
+        :param ticker_name : 종목명 (예시: "삼성전자")
+
+        :return            : DB insert용 현재가 데이터 1건
+
         """
 
         headers = {
@@ -174,26 +174,14 @@ class TodayStockCollector:
         3. 응답 rt_cd 검증 (0: 성공, 그 외: 실패 → 예외 발생)
         4. output 필드에서 가격 데이터 추출 후 dict 리스트로 반환
 
-        Input:
-            - access_token: get_access_token()으로 발급받은 인증 토큰
-            - ticker_code : 종목 코드 (예: "005930")
-            - ticker_name : 종목명 (예: "삼성전자")
-
-        Output:
-            - list[dict] : DB insert용 현재가 데이터 1건
-
         """
 
-        ticker_list = self.stock_collector.get_ticker_info()[:1]
+        ticker_list = self.stock_collector.get_ticker_info()
         access_token = self.get_access_token()
 
         self.logger.info(f"총 {len(ticker_list)} 종목 현재가 수집 시작")
 
         success_count = 0
-        """
-        (수정)
-        success_list -> success_count로 변경
-        """
         fail_list = []
 
         # 전체 결과 누적 (batch insert용)

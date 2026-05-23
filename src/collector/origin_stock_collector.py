@@ -9,30 +9,26 @@ from src.database.postgres_common import PostgresInsert
 
 class OriginStockCollector:
     """
-        주식 데이터 수집 및 DB 적재 클래스
+    주식 데이터 수집 및 DB 적재 클래스
 
-        전체 흐름:
-        1. ticker 목록 조회 (t_ticker_info 기준)
-        2. pykrx에서 2025년 12월 ~ 5월 22일 OHLCV 데이터 수집
-        3. 데이터 전처리 (타입 변환 / 컬럼 rename / 메타데이터 추가)
-        4. batch 단위로 DB 적재
+    전체 흐름:
+    1. ticker 목록 조회 (t_ticker_info 기준)
+    2. pykrx에서 2025년 12월 ~ 5월 22일 OHLCV 데이터 수집
+    3. 데이터 전처리 (타입 변환 / 컬럼 rename / 메타데이터 추가)
+    4. batch 단위로 DB 적재
     """
 
-    def __init__(self, start_date: str, end_date: str):
+    def __init__(self):
         """
         logger + DB + insert 객체 초기화
-
-        param start_date: 수집 시작일 (예: "20251201")
-        param end_date:   수집 종료일 (예: "20260520")
 
         """
         self.logger = SetupLogger.get_logger()
         self.db = PostgresDB()
         self.postgres_insert = PostgresInsert()
-        self.start_date = start_date
-        self.end_date = end_date
 
-    def get_pykrx_monthly_data(self, ticker: str):
+
+    def get_pykrx_monthly_data(self, ticker: str,start_date: str, end_date: str):
 
         """
         pykrx에서 특정 ticker의 OHLCV 데이터를 수집하고 전처리하여 반환
@@ -45,10 +41,17 @@ class OriginStockCollector:
         5. dict 리스트로 변환하여 반환
 
         param ticker: 종목 코드 (예: "005930")
+        param start_date: 수집 시작일 (예: "20251201")
+        param end_date:   수집 종료일 (예: "20260520")
+
         return: list[dict] 형태의 전처리된 OHLCV 데이터. 실패 또는 데이터 없을 시 []
         """
 
-        df = stock.get_market_ohlcv(self.start_date, self.end_date, ticker).reset_index()
+        try:
+            df = stock.get_market_ohlcv(start_date, end_date, ticker).reset_index()
+        except Exception as e:
+            self.logger.error(f"[{ticker}] API 호출 실패 - 사유: {str(e)}")
+            return []
 
         if df is None or df.empty:
             self.logger.warning(f"[{ticker}] {self.start_date} ~ {self.end_date} 기간에 수집된 데이터가 없습니다.")
@@ -97,7 +100,7 @@ class OriginStockCollector:
                 for row in result
             ]
 
-    def insert_stock_data(self):
+    def insert_stock_data(self, start_date: str, end_date: str):
 
         """
         전체 주식 데이터 수집 및 DB insert 실행 함수
@@ -112,7 +115,7 @@ class OriginStockCollector:
         """
 
         start_time = time.time()
-        ticker_list = self.get_ticker_info()[:1]
+        ticker_list = self.get_ticker_info()
         self.logger.info(f"총 {len(ticker_list)}개 종목 수집을 시작합니다.")
 
         success_count = 0
@@ -126,16 +129,8 @@ class OriginStockCollector:
 
             self.logger.info(f"[{idx + 1}/{len(ticker_list)}] {ticker_code} ({ticker_name}) 수집 중...")
 
-            try:
-                stock_result = self.get_pykrx_monthly_data(ticker_code)
-            except Exception as e:
-                self.logger.error(f"[{ticker_code}] {ticker_name} 수집 실패 - 사유: {str(e)}")
-                fail_list.append({
-                    "ticker_code": ticker_code,
-                    "ticker_name": ticker_name,
-                    "reason": str(e)
-                })
-                continue
+            stock_result = self.get_pykrx_monthly_data(ticker_code, start_date, end_date)
+
             time.sleep(0.2)
 
             if not stock_result:
@@ -189,5 +184,5 @@ class OriginStockCollector:
 
 
 if __name__ == "__main__":
-    collector = OriginStockCollector(start_date="20251201", end_date="20260522")
-    collector.insert_stock_data()
+    collector = OriginStockCollector()
+    collector.insert_stock_data(start_date="20251201", end_date="20260522")
