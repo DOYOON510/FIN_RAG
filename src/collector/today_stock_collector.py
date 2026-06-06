@@ -10,6 +10,7 @@ from src.common.setup_log import SetupLogger
 
 from src.database.connect_postgres import PostgresDB
 from src.database.postgres_common import PostgresInsert
+from src.database.postgres_common import PostgresUpdate
 
 
 class TodayStockCollector:
@@ -39,6 +40,7 @@ class TodayStockCollector:
         self.logger = SetupLogger.get_logger()
         self.db = PostgresDB()
         self.postgres_insert = PostgresInsert()
+        self.postgres_update = PostgresUpdate()
 
         self.stock_collector = OriginStockCollector()
 
@@ -49,6 +51,8 @@ class TodayStockCollector:
         # API Key
         self.api_key = APIConstants.API_KEY
         self.api_secret = APIConstants.API_SECRET
+
+
 
     # =========================
     # 1. Access Token 발급
@@ -90,7 +94,7 @@ class TodayStockCollector:
     # =========================
     # 2. 종목 현재가 조회
     # =========================
-    def get_today_price(self, access_token, ticker_code, ticker_name):
+    def get_today_price(self, access_token, ticker_sno ,ticker_code, ticker_name):
         """
         단일 종목 현재가 조회
 
@@ -101,6 +105,7 @@ class TodayStockCollector:
         4. dict 형태로 변환
 
         :param access_token: get_access_token()으로 발급받은 인증 토큰
+        :param ticker_sno: t_ticker_info PK 값
         :param ticker_code : 종목 코드 (예시: "005930")
         :param ticker_name : 종목명 (예시: "삼성전자")
 
@@ -149,6 +154,33 @@ class TodayStockCollector:
 
         output = result.get("output", {})
 
+        high_price = int(output.get("stck_hgpr", 0))
+        low_price = int(output.get("stck_lwpr", 0))
+
+        if high_price == 0 or low_price == 0:
+            self.logger.warning(
+                f"[{ticker_code}] {ticker_name} 비정상 데이터 발견 - "
+                f"시가: {int(output.get('stck_oprc', 0))} | "
+                f"고가: {high_price} | "
+                f"저가: {low_price} | "
+                f"종가: {int(output.get('stck_prpr', 0))} | "
+                f"거래량: {int(output.get('acml_vol', 0))}"
+            )
+
+            self.postgres_update.update_data_to_postgres(
+                "t_ticker_info",
+                "use_yn",
+                ticker_sno,
+                False
+            )
+
+            self.logger.info(
+                f"[{ticker_code}] {ticker_name} "
+                f"use_yn=False 처리 완료"
+            )
+
+            return []
+
         return [{
             "trade_date": datetime.today().strftime("%Y-%m-%d"),
             "ticker_code": ticker_code,
@@ -191,6 +223,7 @@ class TodayStockCollector:
 
             time.sleep(0.2)  # API rate limit 방지
 
+            ticker_sno = ticker_info["ticker_sno"]
             ticker_code = ticker_info["ticker_code"]
             ticker_name = ticker_info["ticker_name"]
 
@@ -202,12 +235,13 @@ class TodayStockCollector:
             try:
                 result = self.get_today_price(
                     access_token,
+                    ticker_sno,
                     ticker_code,
                     ticker_name
                 )
-
-                all_result.extend(result)
-                success_count += 1
+                if result:
+                    all_result.extend(result)
+                    success_count += 1
 
             except Exception as e:
 
@@ -244,6 +278,7 @@ class TodayStockCollector:
             f"실패: {len(fail_list)}건 / "
             f"전체: {len(ticker_list)}건"
         )
+
 
 
 # =========================

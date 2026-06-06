@@ -16,13 +16,15 @@ class CommonConstant:
             "table_id": "stock_id", "table_code": "S", "padding_n": 4, "prefix_col_list": None,
             "prefix_date": "trade_date"
         },
+        "t_ticker_info": {
+            "table_id": "ticker_sno", "table_code": "", "padding_n": 0, "prefix_col_list": None,
+            "prefix_date": None
+        },
     }
 
 
 class StockConstant:
-    # # ❌ 현재 (잘못됨)
-    # token_url = "https://openapi.koreainvestment.com:9443"
-    # stock_url = "https://openapi.koreainvestment.com:9443/oauth2/tokenP"
+
 
     # ✅ 수정
     token_url = "https://openapi.koreainvestment.com:9443/oauth2/tokenP"
