@@ -251,11 +251,11 @@ class RssNewsCollector:
 # =========================
 # 실행
 # =========================
-if __name__ == "__main__":
 
+def main():
     collector = RssNewsCollector(
         sleep_sec=0.5,
-        max_items_per_feed=50    # rss feed당 가져올 기사 개수
+        max_items_per_feed=1
     )
 
     data_list = collector.run(
@@ -263,7 +263,14 @@ if __name__ == "__main__":
     )
 
     postgres_insert = PostgresInsert()
-    postgres_insert.insert_data_to_postgres("t_news_data", data_list, "INCR")
-
+    postgres_insert.insert_data_to_postgres(
+        "t_news_data",
+        data_list,
+        "INCR"
+    )
     logger = SetupLogger.get_logger()
     logger.info(f"RSS DB INSERT 요청 완료: {len(data_list)}건")
+
+
+if __name__ == "__main__":
+    main()
