@@ -298,14 +298,13 @@ class OriginStockCollector:
         )
 
         for item in invalid_ticker_summary:
-            self.logger.info(
+            self.logger.debug(
                 f"[{item['ticker_code']}] "
                 f"{item['ticker_name']} | "
                 f"날짜 수: {item['count']}일 | "
                 f"날짜: {', '.join(item['dates'])}"
             )
 
-        self.logger.info("")
         self.logger.info("======= use_yn=False 업데이트 결과 =======")
         self.logger.info(f"총 {len(updated_tickers)}개 종목 업데이트")
 
