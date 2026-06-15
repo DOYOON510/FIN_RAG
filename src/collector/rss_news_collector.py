@@ -255,7 +255,7 @@ class RssNewsCollector:
 def main():
     collector = RssNewsCollector(
         sleep_sec=0.5,
-        max_items_per_feed=1
+        max_items_per_feed=50
     )
 
     data_list = collector.run(
