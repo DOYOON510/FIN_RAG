@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 if os.getenv("ENV") != "production":
     load_dotenv()
 
-
 class PostgresConstants:
     DB_HOST = os.getenv("POSTGRES_HOST")
     DB_PORT = os.getenv("POSTGRES_PORT")
@@ -13,12 +12,6 @@ class PostgresConstants:
     DB_PASSWORD = os.getenv("POSTGRES_PASSWORD")
     DB_NAME = os.getenv("POSTGRES_DB")
 
-class PgVectorConstants:                                  # ← 추가
-    DB_HOST = os.getenv("PGVECTOR_HOST")
-    DB_PORT = os.getenv("PGVECTOR_PORT")
-    DB_USER = os.getenv("PGVECTOR_USER")
-    DB_PASSWORD = os.getenv("PGVECTOR_PASSWORD")
-    DB_NAME = os.getenv("PGVECTOR_DB")
 
 class APIConstants:
     API_KEY = os.getenv("KR_APIID")
