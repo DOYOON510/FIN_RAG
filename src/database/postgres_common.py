@@ -112,9 +112,15 @@ class PostgresInsert:
                     placeholders = ", ".join([f":{key}" for key in data.keys()])
 
                     # insert 쿼리 생성
+                    conflict_query = ""
+
+                    if table_name == "t_news_data":
+                        conflict_query = "ON CONFLICT (url) DO NOTHING"
+
                     query = text(f"""
                         INSERT INTO {table_name} ({columns})
                         VALUES ({placeholders})
+                        {conflict_query}
                     """)
 
                     self.logger.debug(f"insert 쿼리 = {query}")
@@ -193,7 +199,7 @@ class PostgresUpdate:
                 query = text(f"""
                     UPDATE {table_name}
                     SET {update_col_nm} = :data,
-                        update_dt = NOW()
+                        updated_dt = NOW()
                     WHERE {key_column} = :data_id
                 """)
 
