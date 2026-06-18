@@ -20,9 +20,13 @@ class RssNewsCollector:
     RSS 메타데이터 수집 → 본문 수집 → DB insert용 데이터 생성 → DB INSERT
     """
 
-    def __init__(self, sleep_sec: float = 0.5, max_items_per_feed: int = 1):
-        self.sleep_sec = 0.5
-        self.max_items_per_feed = 50
+    def __init__(
+            self,
+            sleep_sec: float = 0.5,
+            max_items_per_feed: int = 50
+    ):
+        self.sleep_sec = sleep_sec
+        self.max_items_per_feed = max_items_per_feed
         self.logger = SetupLogger.get_logger()
 
         self.logger.info(
@@ -118,7 +122,7 @@ class RssNewsCollector:
                 self.logger.error(f"RSS 본문 수집 실패: media={media}, url={url} | {e}")
                 continue
 
-            time.sleep(random.uniform(self.sleep_sec, self.sleep_sec + 1.0))
+            time.sleep(random.uniform(self.sleep_sec, self.sleep_sec + 3.0))
 
         self.logger.info(f"RSS 본문 수집 완료: 성공={len(results)}건")
 
