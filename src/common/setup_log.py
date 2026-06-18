@@ -1,6 +1,7 @@
 import os
 import logging
 import inspect
+import sys
 from datetime import datetime
 
 from src.common.file_path import FilePathClass
@@ -33,6 +34,8 @@ class SetupLogger:
         if logger.hasHandlers():
             logger.handlers.clear()
 
+        logger.propagate = False
+
         # Set the level of logger(Debug로 고정)
         logger.setLevel(logging.DEBUG)
 
@@ -44,7 +47,7 @@ class SetupLogger:
         cls._log_date = datetime.now().strftime('%Y%m%d')
 
         # 화면에 보여줄 콘솔 로그 핸들러 정의
-        console_handler = logging.StreamHandler()
+        console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(logging.INFO)
         console_format = logging.Formatter('[%(levelname)s] - [%(filename)s, %(lineno)d] - [%(funcName)s] %(message)s')
         console_handler.setFormatter(console_format)
