@@ -22,7 +22,7 @@ class RssNewsCollector:
 
     def __init__(
             self,
-            sleep_sec: float = 0.5,
+            sleep_sec: float = 2,
             max_items_per_feed: int = 50
     ):
         self.sleep_sec = sleep_sec
