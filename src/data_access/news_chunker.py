@@ -224,8 +224,8 @@ class NewsChunker:
 
     def run(
             self,
-            chunk_size: int = 300,
-            chunk_overlap: int = 100,
+            chunk_size: int,
+            chunk_overlap: int,
     ) -> list[dict]:
 
         self.logger.info("===== 뉴스 청킹 작업 시작 =====")
