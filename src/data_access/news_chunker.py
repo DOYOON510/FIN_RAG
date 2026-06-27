@@ -34,7 +34,6 @@ class NewsChunker:
                          FROM t_news_data
                          WHERE del_yn = FALSE
                            AND chunking_yn = FALSE
-                           AND published_date = '2026-06-08'
                          """)
 
             result = session.execute(query)
