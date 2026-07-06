@@ -66,8 +66,6 @@ class PostgresInsert:
         """
         공통 INSERT 함수
         :param table_name: INSERT 할 테이블 이름 (str)
-
-        
         :param data_list: INSERT 할 데이터 리스트
                - [{"collect_id": "C26040701", "data_type": "NEWS", ...},
                   {"collect_id": "C26040702", "data_type": "NEWS", ...}] 형식
@@ -348,33 +346,20 @@ class PostgresUpdate:
 
 
 
-updater = PostgresUpdate()
+if __name__ == "__main__":
+    data_list = [{"NRM260627005104":{"embedding_yn":"1", "embedding_model": "test"}},
+                 {"NRM260627005103":{"embedding_yn":"1", "embedding_model": "test"}}]
 
-updater.update_vector_to_postgres(
-        "t_vector_data",  # 테이블 이름
-        chunking_id,  # 업데이트할 row의 chunking_id
-        {
-        "embedding_model": "KURE-v1",  # 사용한 임베딩 모델명
-        "embedding_vector": str(vector),  # 벡터 (리스트 →문자열 변환 필수!)
-        "embedding_yn": True,  # 임베딩 완료 표시
-        }
-)
+    # data_list = ["NRM260627005104", "NRM260627005103"]
 
-
-
-# if __name__ == "__main__":
-#     # data_list = [{"NRM260627005104":{"embedding_yn":"1", "embedding_model": "test"}},
-#     #              {"NRM260627005103":{"embedding_yn":"1", "embedding_model": "test"}}]
-#     data_list = ["NRM260627005104", "NRM260627005103"]
-#
-#     # data_list = [
-#     #     {'chunking_id': 'NRM260706000101',
-#     #      'chunking_index': 1,
-#     #      "news_title":'은지美·이란 2차협상 낙관론에...美증시 전쟁낙폭 만회 [월가월부]',
-#     #      "category": '경제',
-#     #      'published_date': '2026-04-15',
-#     #      'url': 'https://www.mk.co.kr/article/12017153',
-#     #      'chunking_text': "메타·엔비디아 등 기술주 반등 견인\n협상 기대감에 브렌트·WTI 급락\n이번주 파키스탄서 2차 협상 전망\nPPI 소폭 상승에 인플레 부담 완화"}
-#     # ]
-#     postgres_update = PostgresUpdate()
-#     postgres_update.update_data_to_postgres("t_vector_data", data_list, "embedding_yn" , "0")
+    # data_list = [
+    #     {'chunking_id': 'NRM260706000101',
+    #      'chunking_index': 1,
+    #      "news_title":'은지美·이란 2차협상 낙관론에...美증시 전쟁낙폭 만회 [월가월부]',
+    #      "category": '경제',
+    #      'published_date': '2026-04-15',
+    #      'url': 'https://www.mk.co.kr/article/12017153',
+    #      'chunking_text': "메타·엔비디아 등 기술주 반등 견인\n협상 기대감에 브렌트·WTI 급락\n이번주 파키스탄서 2차 협상 전망\nPPI 소폭 상승에 인플레 부담 완화"}
+    # ]
+    postgres_update = PostgresUpdate()
+    postgres_update.update_data_to_postgres("t_vector_data", data_list)
