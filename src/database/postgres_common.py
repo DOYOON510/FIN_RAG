@@ -86,7 +86,7 @@ class PostgresInsert:
                 need_collect_id = self.table_mapping_dict[table_name]["need_collect_id"]
                 need_table_id = self.table_mapping_dict[table_name]["need_table_id"]
                 prefix_col_list = self.table_mapping_dict[table_name].get("prefix_col_list")
-                prefix_date_col = self.table_mapping_dict[table_name].get("prefix_col_list")
+                prefix_date_col = self.table_mapping_dict[table_name].get("prefix_date")
 
                 # collect_id 채번이 필요한 경우
                 if need_collect_id == "Y":
