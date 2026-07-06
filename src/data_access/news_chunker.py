@@ -113,12 +113,20 @@ class NewsChunker:
             r"^.*=\s*[가-힣]{2,5}\s*기자$",
         ]
 
+        copyright_patterns = [
+            r"GoodNews\s*paper",
+            r"국민일보\s*\(www\.kmib\.co\.kr\)",
+        ]
+
         cleaned_lines = []
 
         for line in text_value.splitlines():
             line = line.strip()
 
             if not line:
+                continue
+
+            if any(re.search(pattern, line, re.IGNORECASE) for pattern in copyright_patterns):
                 continue
 
             if any(re.search(pattern, line) for pattern in email_patterns):
