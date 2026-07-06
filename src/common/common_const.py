@@ -17,6 +17,7 @@ class CommonConstant:
             "prefix_col_list": ["source_type", "publisher_name"],
             "prefix_date": "published_date"
         },
+
         # "t_stock_price_data": {
         #     "table_id": "stock_id",
         #     "table_code": "S",
@@ -40,10 +41,18 @@ class CommonConstant:
             "need_table_id": "N",
         },
 
-        # TODO: t_ticker_info 쓰는데가 있었나??
         "t_ticker_info": {
-            "table_id": "ticker_sno", "table_code": "", "padding_n": 0,
+            "table_id": "ticker_sno",
+            "need_collect_id": "N",
+            "need_table_id": "N",
         },
+
+        "t_error_log": {
+            "table_id": "error_sno",
+            "need_collect_id": "N",
+            "need_table_id": "N",
+        },
+
     }
     
 
