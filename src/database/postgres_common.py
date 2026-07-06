@@ -66,8 +66,6 @@ class PostgresInsert:
         """
         공통 INSERT 함수
         :param table_name: INSERT 할 테이블 이름 (str)
-
-        
         :param data_list: INSERT 할 데이터 리스트
                - [{"collect_id": "C26040701", "data_type": "NEWS", ...},
                   {"collect_id": "C26040702", "data_type": "NEWS", ...}] 형식
@@ -295,77 +293,12 @@ class PostgresUpdate:
                                   exc_info=True, stack_info=True)
                 raise e
 
-    def update_vector_to_postgres(self, table_name, chunking_id, update_data):
-        """
-        공통 UPDATE 함수 (단일 row의 여러 컬럼 동시 업데이트)
-        :param table_name: UPDATE 할 테이블 이름 (str)
-        :param chunking_id: UPDATE 할 데이터 row의 ID (str)
-        :param update_data: UPDATE 할 컬럼-값 딕셔너리 (dict)
-               - {"embedding_model": "KURE-v1",
-                  "embedding_vector": "[0.123, 0.456, ...]",
-                  "embedding_yn": True} 형식
-        :return: 성공 여부 (bool)
-        """
-        if not update_data:
-            self.logger.warning("업데이트할 데이터가 없습니다.")
-            return False
-
-        with self.db.get_postgres_db() as session:
-            try:
-                # 업데이트 할 테이블의 키 값이 되는 컬럼 이름 추출
-                key_column = self.table_mapping_dict[table_name]["table_id"]
-
-                # SET절 생성 ("embedding_model = :embedding_model, ..." 형식)
-                set_clause = ", ".join([f"{col} = :{col}" for col in update_data.keys()])
-
-                # update 쿼리 생성
-                query = text(f"""
-                      UPDATE {table_name}
-                      SET {set_clause},
-                          updated_dt = NOW()
-                      WHERE {key_column} = :chunking_id
-                  """)
-
-                # 쿼리 파라미터 생성 (update_data + data_id)
-                params = dict(update_data)
-                params["chunking_id"] = chunking_id
-
-                result = session.execute(query, params)
-
-                # 업데이트 대상 row가 없는 경우 경고
-                if result.rowcount == 0:
-                    self.logger.warning(f"{key_column}={chunking_id} - 업데이트 대상 없음")
-
-                session.commit()
-                self.logger.info(f"{key_column}={chunking_id} - {list(update_data.keys())} 업데이트 완료")
-                return True
-
-            except Exception as e:
-                session.rollback()
-                self.logger.error(f"{key_column}={chunking_id} - 업데이트 실패 - Error: {str(e)}",
-                exc_info = True, stack_info = True)
-                raise e
-
-
-
-updater = PostgresUpdate()
-
-updater.update_vector_to_postgres(
-        "t_vector_data",  # 테이블 이름
-        chunking_id,  # 업데이트할 row의 chunking_id
-        {
-        "embedding_model": "KURE-v1",  # 사용한 임베딩 모델명
-        "embedding_vector": str(vector),  # 벡터 (리스트 →문자열 변환 필수!)
-        "embedding_yn": True,  # 임베딩 완료 표시
-        }
-)
-
-
 
 # if __name__ == "__main__":
-#     # data_list = [{"NRM260627005104":{"embedding_yn":"1", "embedding_model": "test"}},
-#     #              {"NRM260627005103":{"embedding_yn":"1", "embedding_model": "test"}}]
-#     data_list = ["NRM260627005104", "NRM260627005103"]
+#     data_list = [{"NRM260627005104":{"embedding_yn":"1", "embedding_model": "test"}},
+#                  {"NRM260627005103":{"embedding_yn":"1", "embedding_model": "test"}}]
+#
+#     # data_list = ["NRM260627005104", "NRM260627005103"]
 #
 #     # data_list = [
 #     #     {'chunking_id': 'NRM260706000101',
@@ -377,4 +310,4 @@ updater.update_vector_to_postgres(
 #     #      'chunking_text': "메타·엔비디아 등 기술주 반등 견인\n협상 기대감에 브렌트·WTI 급락\n이번주 파키스탄서 2차 협상 전망\nPPI 소폭 상승에 인플레 부담 완화"}
 #     # ]
 #     postgres_update = PostgresUpdate()
-#     postgres_update.update_data_to_postgres("t_vector_data", data_list, "embedding_yn" , "0")
+#     postgres_update.update_data_to_postgres("t_vector_data", data_list)
