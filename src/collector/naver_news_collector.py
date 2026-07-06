@@ -90,6 +90,18 @@ class NaverNewsCollector:
             return response.json()
 
         except Exception as e:
+            error_type = 'API 오류'             # 에러 타입
+            error_detail = str(e)              # 에러 상세 내용
+            request_url = url                  # 요청 URL
+
+            # TODO: 추후 에러로그 테이블 insert 로직 추가 예정
+            self.logger.error(
+                f"RSS_ERROR_LOG_DATA | "
+                f"error_type={error_type}, "
+                f"error_detail={error_detail}, "
+                f"request_url={request_url}"
+            )
+
             self.logger.error(f"Naver API 요청 실패: query={query}, start={start} | {e}")
             return {}
 
@@ -147,7 +159,7 @@ class NaverNewsCollector:
                     break
 
             start += self.DISPLAY_PER_CALL
-            time.sleep(random.uniform(0.2, 0.5))  # API 과부하 방지
+            time.sleep(random.uniform(0.2, 1.5))  # API 과부하 방지
 
         return news_list
 
@@ -241,14 +253,15 @@ class NaverNewsCollector:
 
                 results.append({
                     **news,
-                    "content": content
+                    "content": content,
+                    "contents_len": len(content),
                 })
 
             except Exception as e:
                 self.logger.error(f"본문 수집 실패: {url} | {e}")
                 continue
 
-            time.sleep(random.uniform(0.5, 1.5))  # 크롤링 부하 방지
+            time.sleep(random.uniform(2, 3))  # 크롤링 부하 방지
 
         self.logger.info(f"본문 수집 완료: {len(results)}건")
 
@@ -288,6 +301,7 @@ class NaverNewsCollector:
                 "category": article.get("category", ""),
                 "published_date": published_date,
                 "contents": article.get("content", ""),
+                "contents_len": article.get("contents_len", 0),
                 "url": article.get("link", ""),
             })
 

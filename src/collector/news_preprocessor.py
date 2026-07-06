@@ -149,18 +149,20 @@ class NewsPreprocessor:
 
         # 제거할 불필요 문구
         garbage_patterns = [
-            "무단 전재",
-            "재배포 금지",
-            "구독",
-            "앱에서 읽기",
-            "공유",
-            "댓글",
+            r"무단\s*전재",
+            r"재배포\s*금지",
+            r"재배포\s*및\s*AI\s*학습\s*이용\s*금지",
+            r"AI\s*학습\s*이용\s*금지",
+            r"구독",
+            r"앱에서 읽기",
+            r"공유",
+            r"댓글",
         ]
 
         filtered_lines = []
 
         for line in cleaned.splitlines():
-            if not any(g in line for g in garbage_patterns):
+            if not any(re.search(pattern, line, re.IGNORECASE) for pattern in garbage_patterns):
                 filtered_lines.append(line)
 
         return "\n".join(filtered_lines).strip()
