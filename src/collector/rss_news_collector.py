@@ -5,7 +5,6 @@ import requests
 
 import feedparser
 
-from src.analysis.rss_crawling import RSS_FEEDS
 from src.common.common_const import NewsCollectorConfig
 from src.common.setup_log import SetupLogger
 from src.collector.news_preprocessor import NewsPreprocessor
@@ -24,7 +23,7 @@ class RssNewsCollector:
     def __init__(
             self,
             sleep_sec: float = 2,
-            max_items_per_feed: int = 1
+            max_items_per_feed: int = 50
     ):
         self.sleep_sec = sleep_sec
         self.max_items_per_feed = max_items_per_feed
@@ -94,7 +93,18 @@ class RssNewsCollector:
                         results.append(news)
 
                 except Exception as e:
-                    # RSS 자체 실패
+                    error_type = 'API 오류'             # 에러 타입
+                    error_detail = str(e)              # 에러 상세 내용
+                    request_url = url                  # 요청 URL
+
+                    # TODO: 추후 에러로그 테이블 insert 로직 추가 예정
+                    self.logger.error(
+                        f"RSS_ERROR_LOG_DATA | "
+                        f"error_type={error_type}, "
+                        f"error_detail={error_detail}, "
+                        f"request_url={request_url}"
+                    )
+
                     self.logger.error(
                         f"RSS 수집 실패: media={media}, category={category}, url={url} | {e}"
                     )
@@ -153,7 +163,8 @@ class RssNewsCollector:
 
                 results.append({
                     **news,
-                    "content": content
+                    "content": content,
+                    "contents_len": len(content),
                 })
 
             except Exception as e:
@@ -162,7 +173,7 @@ class RssNewsCollector:
                 continue
 
             # 요청 간 랜덤 대기 (서버 부하 방지)
-            time.sleep(random.uniform(self.sleep_sec, self.sleep_sec + 1.0))
+            time.sleep(random.uniform(self.sleep_sec, self.sleep_sec + 3.0))
 
         self.logger.info(f"RSS 본문 수집 완료: 성공={len(results)}건")
 
@@ -208,6 +219,7 @@ class RssNewsCollector:
                 "category": article.get("category", ""),
                 "published_date": published_date,
                 "contents": article.get("content", ""),
+                "contents_len": article.get("contents_len", 0),
                 "url": article.get("link", ""),
             })
 

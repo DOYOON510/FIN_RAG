@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from src.common.common_const import NewsCollectorConfig
+from src.common.setup_log import SetupLogger
 from src.collector.news_preprocessor import NewsPreprocessor
 
 
@@ -59,7 +60,18 @@ class ArticleFetcher:
             return html
 
         except Exception as e:
-            print(f"[HTML 요청 실패] {url} | {e}")
+            logger = SetupLogger.get_logger()
+            error_type = "API 오류"
+            error_detail = str(e)
+            request_url = url
+
+            logger.error(
+                f"HTML_ERROR_LOG_DATA | "
+                f"error_type={error_type}, "
+                f"error_detail={error_detail}, "
+                f"request_url={request_url}"
+            )
+            logger.error(f"HTML 요청 실패: url={url} | {e}")
             return ""
 
     @staticmethod
