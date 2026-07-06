@@ -42,6 +42,7 @@ class NaverNewsCollector:
         self.start_date = start_date
         self.end_date = end_date
         self.logger = SetupLogger.get_logger()
+        self.postgres_insert = PostgresInsert()
 
         self.logger.info(f"네이버 뉴스 수집기 생성: {self.start_date} ~ {self.end_date}")
 
@@ -90,7 +91,7 @@ class NaverNewsCollector:
             return response.json()
 
         except Exception as e:
-            error_type = 'API 오류'             # 에러 타입
+            error_type = 'HTTP 오류'             # 에러 타입
             error_detail = str(e)              # 에러 상세 내용
             request_url = url                  # 요청 URL
 
@@ -100,6 +101,13 @@ class NaverNewsCollector:
                 f"error_type={error_type}, "
                 f"error_detail={error_detail}, "
                 f"request_url={request_url}"
+            )
+
+            error_list = [{'error_type': error_type, 'error_dtl': error_detail, 'request_url': request_url}]
+
+            self.postgres_insert.insert_data_to_postgres(
+                "t_error_log",
+                error_list,
             )
 
             self.logger.error(f"Naver API 요청 실패: query={query}, start={start} | {e}")
@@ -338,7 +346,7 @@ class NaverNewsCollector:
 if __name__ == "__main__":
     collector = NaverNewsCollector(
         start_date="2026-01-01",
-        end_date="2026-05-12"
+        end_date="2026-07-06"
     )
 
     data_list = collector.run(NewsCollectorConfig.KEYWORDS_BY_CATEGORY)

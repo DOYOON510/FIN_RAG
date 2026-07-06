@@ -28,6 +28,7 @@ class RssNewsCollector:
         self.sleep_sec = sleep_sec
         self.max_items_per_feed = max_items_per_feed
         self.logger = SetupLogger.get_logger()
+        self.postgres_insert = PostgresInsert()
 
         self.logger.info(
             f"RSS 뉴스 수집기 생성: sleep_sec={self.sleep_sec}, "
@@ -93,17 +94,25 @@ class RssNewsCollector:
                         results.append(news)
 
                 except Exception as e:
-                    error_type = 'API 오류'             # 에러 타입
+                    error_type = 'HTTP 오류'             # 에러 타입
                     error_detail = str(e)              # 에러 상세 내용
                     request_url = url                  # 요청 URL
 
-                    # TODO: 추후 에러로그 테이블 insert 로직 추가 예정
+
                     self.logger.error(
                         f"RSS_ERROR_LOG_DATA | "
                         f"error_type={error_type}, "
-                        f"error_detail={error_detail}, "
+                        f"error_dtl={error_detail}, "
                         f"request_url={request_url}"
                     )
+
+                    error_list = [{'error_type': error_type, 'error_dtl': error_detail, 'request_url': request_url}]
+
+                    self.postgres_insert.insert_data_to_postgres(
+                        "t_error_log",
+                        error_list,
+                    )
+
 
                     self.logger.error(
                         f"RSS 수집 실패: media={media}, category={category}, url={url} | {e}"
@@ -271,8 +280,7 @@ class RssNewsCollector:
             self.logger.warning("INSERT 대상 데이터 없음")
             return False
 
-        postgres_insert = PostgresInsert()
-        postgres_insert.insert_data_to_postgres(
+        self.postgres_insert.insert_data_to_postgres(
             "t_news_data",
             data_list,
             "INCR"

@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 from src.common.common_const import NewsCollectorConfig
 from src.common.setup_log import SetupLogger
 from src.collector.news_preprocessor import NewsPreprocessor
+from src.database.postgres_common import PostgresInsert
 
 
 class ArticleFetcher:
@@ -61,7 +62,7 @@ class ArticleFetcher:
 
         except Exception as e:
             logger = SetupLogger.get_logger()
-            error_type = "API 오류"
+            error_type = "HTTP 오류"
             error_detail = str(e)
             request_url = url
 
@@ -71,6 +72,15 @@ class ArticleFetcher:
                 f"error_detail={error_detail}, "
                 f"request_url={request_url}"
             )
+
+            error_list = [{'error_type': error_type, 'error_dtl': error_detail, 'request_url': request_url}]
+
+            postgres_insert = PostgresInsert()
+            postgres_insert.insert_data_to_postgres(
+                "t_error_log",
+                error_list,
+            )
+
             logger.error(f"HTML 요청 실패: url={url} | {e}")
             return ""
 
