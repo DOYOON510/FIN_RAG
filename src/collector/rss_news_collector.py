@@ -5,6 +5,7 @@ import requests
 
 import feedparser
 
+from src.analysis.rss_crawling import RSS_FEEDS
 from src.common.common_const import NewsCollectorConfig
 from src.common.setup_log import SetupLogger
 from src.collector.news_preprocessor import NewsPreprocessor
@@ -23,7 +24,7 @@ class RssNewsCollector:
     def __init__(
             self,
             sleep_sec: float = 2,
-            max_items_per_feed: int = 50
+            max_items_per_feed: int = 1
     ):
         self.sleep_sec = sleep_sec
         self.max_items_per_feed = max_items_per_feed
@@ -34,7 +35,22 @@ class RssNewsCollector:
             f"max_items_per_feed={self.max_items_per_feed}"
         )
 
+    # =========================
+    # 1. RSS 기사 링크 수집
+    # =========================
     def collect_rss_links(self, rss_feeds: dict) -> list[dict]:
+        """
+        RSS 피드에서 뉴스 메타데이터 수집
+
+        처리 흐름:
+        1. 언론사 → 카테고리 순회
+        2. RSS URL 파싱 (feedparser)
+        3. 기사 정보(title, link, published_at 등) 추출
+        4. 중복 제거
+
+        :param rss_feeds: {언론사: {카테고리: RSS URL}}
+        :return: 뉴스 메타데이터 리스트 (본문 제외)
+        """
         results = []
 
         for media, categories in rss_feeds.items():
@@ -51,8 +67,8 @@ class RssNewsCollector:
                     )
                     res.raise_for_status()
 
-                    feed = feedparser.parse(res.content)
-                    entries = feed.entries[:self.max_items_per_feed]
+                    feed = feedparser.parse(res.content)    # xml -> 파이썬 객체로 변환
+                    entries = feed.entries[:self.max_items_per_feed]    # 최대 개수 제한해서 가져옴.
 
                     if not entries:
                         self.logger.debug(
@@ -60,6 +76,7 @@ class RssNewsCollector:
                         )
                         continue
 
+                    # 각 기사 데이터 생성
                     for entry in entries:
                         news = {
                             "media": media,
@@ -77,11 +94,13 @@ class RssNewsCollector:
                         results.append(news)
 
                 except Exception as e:
+                    # RSS 자체 실패
                     self.logger.error(
                         f"RSS 수집 실패: media={media}, category={category}, url={url} | {e}"
                     )
                     continue
 
+        # 중복 제거 (link + title 기준)
         before_count = len(results)
         results = NewsPreprocessor.remove_duplicate_news(results)
         after_count = len(results)
@@ -92,7 +111,22 @@ class RssNewsCollector:
 
         return results
 
+    # =========================
+    # 2. 기사 본문 수집
+    # =========================
     def collect_article_contents(self, news_list: list[dict]) -> list[dict]:
+        """
+        기사 링크를 기반으로 본문 수집
+
+        처리 흐름:
+        1. URL 요청 → HTML 가져오기
+        2. HTML 파싱 → 본문 추출
+        3. 본문 길이 필터 (500자 이상)
+        4. content 추가
+
+        :param news_list: 메타데이터 리스트
+        :return: 본문 포함 뉴스 리스트
+        """
         results = []
 
         self.logger.info(f"RSS 본문 수집 시작: 대상={len(news_list)}건")
@@ -104,9 +138,13 @@ class RssNewsCollector:
             self.logger.info(f"본문 수집: ({idx + 1}/{len(news_list)}) {media} | {url}")
 
             try:
+                # HTML 가져오기
                 html = ArticleFetcher.fetch_html(url)
+
+                # 본문 추출
                 content = ArticleFetcher.extract_article_text_by_media(media, html)
 
+                # 너무 짧으면 제외
                 if len(content) < 500:
                     self.logger.debug(
                         f"본문 길이 부족 제외: length={len(content)}, media={media}, url={url}"
@@ -119,16 +157,32 @@ class RssNewsCollector:
                 })
 
             except Exception as e:
+                # 본문 수집 실패
                 self.logger.error(f"RSS 본문 수집 실패: media={media}, url={url} | {e}")
                 continue
 
-            time.sleep(random.uniform(self.sleep_sec, self.sleep_sec + 3.0))
+            # 요청 간 랜덤 대기 (서버 부하 방지)
+            time.sleep(random.uniform(self.sleep_sec, self.sleep_sec + 1.0))
 
         self.logger.info(f"RSS 본문 수집 완료: 성공={len(results)}건")
 
         return results
 
+    # =========================
+    # 3. DB insert용 데이터 변환
+    # =========================
     def build_data_list(self, articles: list[dict]) -> list[dict]:
+        """
+        DB insert용 데이터 형태로 변환
+
+        처리 내용:
+        - 날짜 보정
+        - 컬럼명 변환
+        - publisher 코드 매핑
+
+        :param articles: 본문 포함 뉴스 리스트
+        :return: DB insert용 data_list
+        """
         data_list = []
 
         for article in articles:
@@ -143,6 +197,7 @@ class RssNewsCollector:
                     if collected_at else datetime.now().strftime("%Y-%m-%d")
                 )
 
+            # DB 스키마에 맞게 변환
             data_list.append({
                 "source_type": article.get("SOURCE_TYPE", "RSS"),
                 "news_title": article.get("title", ""),
@@ -160,6 +215,9 @@ class RssNewsCollector:
 
         return data_list
 
+    # =========================
+    # 4. 실행 함수
+    # =========================
     def run(self, rss_feeds: dict) -> list[dict]:
         """
         RSS 뉴스 수집 전체 프로세스 실행
@@ -167,11 +225,14 @@ class RssNewsCollector:
         """
         self.logger.info("RSS 뉴스 수집 시작")
 
+        # 1. 링크 수집
         links = self.collect_rss_links(rss_feeds=rss_feeds)
         self.logger.info(f"RSS 링크 수집 완료: {len(links)}건")
 
+        # 2. 본문 수집
         articles = self.collect_article_contents(links)
 
+        # 3. DB 데이터 변환
         data_list = self.build_data_list(articles)
 
         self.logger.info(f"RSS 뉴스 수집 완료: 최종 {len(data_list)}건")
