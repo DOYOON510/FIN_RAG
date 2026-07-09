@@ -82,6 +82,9 @@ class TodayStockCollector:
         )
 
         if res.status_code != 200:
+            error_list = [{"error_type": "토큰 발급 오류",
+                           "error_dtl": f"HTTP {res.status_code} | {res.text}","request_url": self.token_url}]
+            self.postgres_insert.insert_data_to_postgres("t_error_log", error_list)
             raise Exception(f"토큰 발급 실패 - {res.text}")
 
         result = res.json()
@@ -133,18 +136,25 @@ class TodayStockCollector:
             params=params
         )
 
-        if res.status_code != 200: #성공이 아니라면
-            raise Exception(f"현재가 조회 실패 - {res.text}") #실패하면 예외를 발생시켜서 except로 넘기는 구조
+        if res.status_code != 200:
+            error_list = [{"error_type": "HTTP 오류",
+                           "error_dtl": f"[{ticker_code}] {ticker_name} | HTTP {res.status_code} | {res.text}",
+                           "request_url": self.stock_url}]
+            self.postgres_insert.insert_data_to_postgres("t_error_log", error_list)
+            raise Exception(f"현재가 조회 실패 - {res.text}")
+
+
 
         result = res.json()
 
         rt_cd = result.get("rt_cd")
         msg1 = result.get("msg1")
 
-        if rt_cd != "0": # 0이 아니라면 -> 실패라면
-            self.logger.error(f"[현재가 조회 실패] {ticker_code} {ticker_name} | msg={msg1}")
-
-
+        if rt_cd != "0":
+            error_list = [
+                {"error_type": "API 오류", "error_dtl": f"[{ticker_code}] {ticker_name} | rt_cd={rt_cd} | msg={msg1}",
+                 "request_url": self.stock_url}]
+            self.postgres_insert.insert_data_to_postgres("t_error_log", error_list)
             raise Exception(f"{ticker_code} {ticker_name} 현재가 조회 실패 - {msg1}")
 
         #result 구조 : {"rt_cd": "0", 응답 상태 코드 0: 성공 그외 : 실패
@@ -243,12 +253,12 @@ class TodayStockCollector:
                     all_result.extend(result)
                     success_count += 1
 
+
             except Exception as e:
 
-                self.logger.error(
-                    f"[현재가 수집 실패] {ticker_code} {ticker_name} | error={e}"
-                )
-
+                error_list = [{"error_type": "현재가 수집 오류", "error_dtl": f"[{ticker_code}] {ticker_name} | {str(e)}",
+                               "request_url": self.stock_url}]
+                self.postgres_insert.insert_data_to_postgres("t_error_log", error_list)
                 fail_list.append({
                     "ticker_code": ticker_code,
                     "ticker_name": ticker_name,
@@ -278,8 +288,6 @@ class TodayStockCollector:
             f"실패: {len(fail_list)}건 / "
             f"전체: {len(ticker_list)}건"
         )
-
-
 
 # =========================
 # 실행

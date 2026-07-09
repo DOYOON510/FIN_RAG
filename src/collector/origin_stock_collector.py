@@ -6,6 +6,7 @@ from src.database.connect_postgres import PostgresDB
 from src.common.setup_log import SetupLogger
 from src.database.postgres_common import PostgresInsert
 from src.database.postgres_common import PostgresUpdate
+from src.common.common_const import StockConstant
 
 
 
@@ -28,6 +29,9 @@ class OriginStockCollector:
         self.logger = SetupLogger.get_logger()
         self.db = PostgresDB()
         self.postgres_insert = PostgresInsert()
+
+        self.token_url = StockConstant.token_url
+        self.stock_url = StockConstant.stock_url
 
 
     def get_pykrx_monthly_data(self, ticker: str,start_date: str, end_date: str):
@@ -57,6 +61,8 @@ class OriginStockCollector:
             return []
 
         if df is None or df.empty:
+            error_list = [{"error_type": "pykrx 오류", "error_dtl": f"[{ticker}] {start_date} ~ {end_date} 기간에 수집된 데이터가 없습니다.", "request_url": None}]
+            self.postgres_insert.insert_data_to_postgres("t_error_log", error_list)
             self.logger.warning(f"[{ticker}] {start_date} ~ {end_date} 기간에 수집된 데이터가 없습니다.")
             return []
 
@@ -240,10 +246,14 @@ class OriginStockCollector:
                     ticker_code
                 ).reset_index()
 
+
+
             except Exception as e:
-                self.logger.error(
-                    f"[{ticker_code}] API 호출 실패 - {str(e)}"
-                )
+                error_msg = f"[{ticker_code}] API 호출 실패 - {str(e)}"
+                error_list = [{"error_type": "API 오류", "error_dtl": error_msg,
+                               "request_url": self.stock_url}]
+                self.postgres_insert.insert_data_to_postgres("t_error_log", error_list)
+                self.logger.error(error_msg)
                 continue
 
             if df is None or df.empty:
@@ -322,10 +332,10 @@ if __name__ == "__main__":
 
     collector.check_invalid_data(
         start_date="20251201",
-        end_date="20260605"
+        end_date="20260707"
     )
 
     collector.insert_stock_data(
         start_date="20251201",
-        end_date="20260605"
+        end_date="20260707"
     )
