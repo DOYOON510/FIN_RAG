@@ -61,7 +61,7 @@ class OriginStockCollector:
             return []
 
         if df is None or df.empty:
-            error_list = [{"error_type": "pykrx 오류", "error_dtl": f"[{ticker}] {start_date} ~ {end_date} 기간에 수집된 데이터가 없습니다.", "request_url": None}]
+            error_list = [{"error_type": "HTTP 오류", "error_dtl": f"[{ticker}] {start_date} ~ {end_date} 기간에 수집된 데이터가 없습니다.", "request_url": None}]
             self.postgres_insert.insert_data_to_postgres("t_error_log", error_list)
             self.logger.warning(f"[{ticker}] {start_date} ~ {end_date} 기간에 수집된 데이터가 없습니다.")
             return []
@@ -250,7 +250,7 @@ class OriginStockCollector:
 
             except Exception as e:
                 error_msg = f"[{ticker_code}] API 호출 실패 - {str(e)}"
-                error_list = [{"error_type": "API 오류", "error_dtl": error_msg,
+                error_list = [{"error_type": "HTTP 오류", "error_dtl": error_msg,
                                "request_url": self.stock_url}]
                 self.postgres_insert.insert_data_to_postgres("t_error_log", error_list)
                 self.logger.error(error_msg)
@@ -284,8 +284,8 @@ class OriginStockCollector:
                 if len(invalid_rows) == len(df):
                     updater.update_data_to_postgres(
                         "t_ticker_info",
-                        "use_yn",
                         ticker_sno,
+                        "use_yn",
                         False
                     )
 
@@ -332,10 +332,10 @@ if __name__ == "__main__":
 
     collector.check_invalid_data(
         start_date="20251201",
-        end_date="20260707"
+        end_date="20260709"
     )
 
     collector.insert_stock_data(
         start_date="20251201",
-        end_date="20260707"
+        end_date="20260709"
     )

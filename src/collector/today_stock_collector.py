@@ -82,7 +82,7 @@ class TodayStockCollector:
         )
 
         if res.status_code != 200:
-            error_list = [{"error_type": "토큰 발급 오류",
+            error_list = [{"error_type": "HTTP 오류",
                            "error_dtl": f"HTTP {res.status_code} | {res.text}","request_url": self.token_url}]
             self.postgres_insert.insert_data_to_postgres("t_error_log", error_list)
             raise Exception(f"토큰 발급 실패 - {res.text}")
@@ -152,7 +152,7 @@ class TodayStockCollector:
 
         if rt_cd != "0":
             error_list = [
-                {"error_type": "API 오류", "error_dtl": f"[{ticker_code}] {ticker_name} | rt_cd={rt_cd} | msg={msg1}",
+                {"error_type": " HTTP 오류", "error_dtl": f"[{ticker_code}] {ticker_name} | rt_cd={rt_cd} | msg={msg1}",
                  "request_url": self.stock_url}]
             self.postgres_insert.insert_data_to_postgres("t_error_log", error_list)
             raise Exception(f"{ticker_code} {ticker_name} 현재가 조회 실패 - {msg1}")
@@ -179,8 +179,8 @@ class TodayStockCollector:
 
             self.postgres_update.update_data_to_postgres(
                 "t_ticker_info",
-                "use_yn",
                 ticker_sno,
+                "use_yn",
                 False
             )
 
@@ -289,6 +289,9 @@ class TodayStockCollector:
             f"전체: {len(ticker_list)}건"
         )
 
+        return fail_list
+
+
 # =========================
 # 실행
 # =========================
@@ -297,4 +300,5 @@ if __name__ == "__main__":
     print("현재 주가 전체 수집 시작")
 
     today_stock_collector = TodayStockCollector()
-    today_stock_collector.insert_today_stock_data()
+    fail_list = today_stock_collector.insert_today_stock_data()
+
