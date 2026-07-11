@@ -12,9 +12,12 @@ if FIN_RAG_PATH not in sys.path:
 # 실제 파일에서 '클래스'를 직접 임포트
 try:
     from src.collector.rss_news_collector import RssNewsCollector
+    from src.data_access.news_chunker import NewsChunker
+    from src.data_access.news_embedding import EmbeddingNewsData
 except ImportError as e:
-    print(f"FIN_RAG - RssNewsCollector 클래스를 불러오는 중 오류 발생: {e}")
-    RssNewsCollector = None
+    print(f"FIN_RAG - 뉴스 관련 클래스를 불러오는 중 오류 발생: {e}")
+    RssNewsCollector, NewsChunker, EmbeddingNewsData = None, None, None
+
 
 def rss_news_collector():
     if RssNewsCollector is None:
@@ -22,8 +25,31 @@ def rss_news_collector():
 
     # 클래스 인스턴스 생성
     rss_collector = RssNewsCollector()
+
     # 클래스 내부의 주요 실행 메서드 호출
     rss_collector.main()
+
+def news_chunker():
+    if NewsChunker is None:
+        raise ImportError("NewsChunker 클래스를 임포트하지 못했습니다.")
+
+    # 클래스 인스턴스 생성
+    news_chunker = NewsChunker()
+
+    # 클래스 내부의 주요 실행 메서드 호출
+    news_chunker.main()
+
+
+def rss_news_collector():
+    if RssNewsCollector is None:
+        raise ImportError("RssNewsCollector 클래스를 임포트하지 못했습니다.")
+
+    # 클래스 인스턴스 생성
+    rss_collector = RssNewsCollector()
+
+    # 클래스 내부의 주요 실행 메서드 호출
+    rss_collector.main()
+
 
 # 기본 설정
 default_args = {

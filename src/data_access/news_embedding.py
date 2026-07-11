@@ -2,6 +2,7 @@ import time
 from sqlalchemy import text
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
+import math
 
 from src.database.connect_postgres import PostgresDB
 from src.common.setup_log import SetupLogger
@@ -42,14 +43,11 @@ class EmbeddingNewsData:
                 self.logger.error(f"t_vector_data - 청킹 데이터 조회 실패 - Error: {str(e)}", exc_info=True, stack_info=True)
                 raise e
 
-    def run_embedding(self, news_chunk_data):
+    def run_embedding(self, model, news_chunk_data):
         """
         임베딩 모델 실행
         """
-        self.logger.info(f"임베딩 모델 로드 및 시작: {self.model_name}")
-
         start_time = time.time()
-        model = SentenceTransformer(self.model_name)
         embedding_result_list = []
 
         for chunking_data in tqdm(news_chunk_data):
@@ -61,7 +59,7 @@ class EmbeddingNewsData:
             embedding_vector = model.encode(
                 chunking_text,
                 normalize_embeddings=True,
-                show_progress_bar=True
+                show_progress_bar=False
             ).tolist()
 
             # DB Update 함수의 input 형태로 data append
@@ -81,13 +79,46 @@ class EmbeddingNewsData:
 
         return True
 
-    def run(self):
+    def run(self, batch_size):
         """
-        임베딩 전체 실행 코드
+        임베딩 배치 실행 코드
         """
         news_chunk_data = self.get_news_chunk_data()
-        self.run_embedding(news_chunk_data)
+
+        if not news_chunk_data:
+            self.logger.warning("임베딩 대상 데이터가 없습니다.")
+            return True
+
+
+        self.logger.info(f"임베딩 모델 로드 및 시작: {self.model_name}")
+        model = SentenceTransformer(self.model_name)
+
+        total_count = len(news_chunk_data)
+        total_batch = math.ceil(total_count / batch_size)
+
+        # 조회한 데이터를 batch_size 단위로 나누어 순차적으로 임베딩 수행
+        for batch_no, start_index in enumerate(range(0, total_count, batch_size), start=1):
+            batch_data = news_chunk_data[
+                         start_index:start_index + batch_size
+                         ]
+
+            end_index = min(start_index + len(batch_data), total_count)
+
+            self.logger.info(
+                f"임베딩 배치 시작 ({batch_no}/{total_batch}) "
+                f"- {start_index + 1} ~ {end_index} / {total_count}건"
+            )
+
+            self.run_embedding(model, batch_data)
+
+            self.logger.info(
+                f"임베딩 배치 완료 ({batch_no}/{total_batch})"
+            )
+            break
+
+        return True
+
 
 if __name__ == "__main__":
     embedding_news_data = EmbeddingNewsData()
-    embedding_news_data.run()
+    embedding_news_data.run(500)
