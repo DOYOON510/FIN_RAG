@@ -114,7 +114,6 @@ class EmbeddingNewsData:
             self.logger.info(
                 f"임베딩 배치 완료 ({batch_no}/{total_batch})"
             )
-            break
 
         return True
 
