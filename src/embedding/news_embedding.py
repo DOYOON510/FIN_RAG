@@ -1,6 +1,7 @@
 import time
 from sqlalchemy import text
 from sentence_transformers import SentenceTransformer
+from tqdm import tqdm
 
 from src.database.connect_postgres import PostgresDB
 from src.common.setup_log import SetupLogger
@@ -51,7 +52,7 @@ class EmbeddingNewsData:
         model = SentenceTransformer(self.model_name)
         embedding_result_list = []
 
-        for chunking_data in news_chunk_data:
+        for chunking_data in tqdm(news_chunk_data):
             chunking_id = chunking_data["chunking_id"]
             chunking_text = chunking_data["chunking_text"]
             self.logger.debug(f"{chunking_id} - 임베딩 시작")
