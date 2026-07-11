@@ -27,11 +27,11 @@ class EmbeddingNewsData:
                 query = text(f"""
                     SELECT chunking_id, chunking_text
                     FROM t_vector_data
+                    WHERE embedding_yn = False
                 """)
 
                 result = session.execute(query)
                 rows = result.mappings().all()
-                rows = rows[:100]
 
                 self.logger.info(f"t_vector_data - 청킹 데이터 {len(rows)}건 조회 완료")
                 return rows
@@ -43,27 +43,27 @@ class EmbeddingNewsData:
 
     def run_embedding(self, news_chunk_data):
         """
-        임베딩
+        임베딩 모델 실행
         """
-        print(f"\n{'=' * 80}")
-        print(f"임베딩 모델 로드: {self.model_name}")
-        print(f"{'=' * 80}")
+        self.logger.info(f"임베딩 모델 로드 및 시작: {self.model_name}")
 
         start_time = time.time()
-
         model = SentenceTransformer(self.model_name)
-
         embedding_result_list = []
+
         for chunking_data in news_chunk_data:
             chunking_id = chunking_data["chunking_id"]
             chunking_text = chunking_data["chunking_text"]
+            self.logger.debug(f"{chunking_id} - 임베딩 시작")
 
+            # 임베딩 모델 실행
             embedding_vector = model.encode(
                 chunking_text,
                 normalize_embeddings=True,
                 show_progress_bar=True
             ).tolist()
 
+            # DB Update 함수의 input 형태로 data append
             embedding_result_list.append({
                 chunking_id: {
                     "embedding_model": self.model_name,
@@ -72,22 +72,19 @@ class EmbeddingNewsData:
                 }
             })
 
-            print(embedding_result_list)
-
+        # t_vector_data 테이블 Update
         self.postgres_update.update_data_to_postgres("t_vector_data", embedding_result_list)
 
         elapsed_time = time.time() - start_time
-        print(f"\n 완료 - 소요시간: {elapsed_time:.2f}초")
+        self.logger.info(f"\n 임베딩 완료 - 소요시간: {elapsed_time:.2f}초")
 
-        # return embeddings
+        return True
 
     def run(self):
         """
-        전체 모델 테스트 실행
+        임베딩 전체 실행 코드
         """
-
         news_chunk_data = self.get_news_chunk_data()
-
         self.run_embedding(news_chunk_data)
 
 if __name__ == "__main__":
