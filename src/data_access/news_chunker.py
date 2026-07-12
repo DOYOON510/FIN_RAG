@@ -15,8 +15,8 @@ class NewsChunker:
     t_vector_data에 저장하는 클래스
     """
 
-    def __init__(self, db):
-        self.db = db
+    def __init__(self):
+        self.db = PostgresDB
         self.quiz_cleaner = QuizNewsCleaner()
         self.logger = SetupLogger.get_logger()
         self.postgres_insert = PostgresInsert()
@@ -235,19 +235,9 @@ class NewsChunker:
         return all_chunks
 
 
-def execute():
-    """
-    뉴스 청킹 전체 프로세스를 실행한다.
-    """
-    db = PostgresDB()
-
-    chunker = NewsChunker(db=db)
-
+if __name__ == "__main__":
+    chunker = NewsChunker()
     chunker.run(
         chunk_size=500,
         chunk_overlap=100,
     )
-
-
-if __name__ == "__main__":
-    execute()
