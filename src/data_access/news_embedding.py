@@ -89,7 +89,6 @@ class EmbeddingNewsData:
             self.logger.warning("임베딩 대상 데이터가 없습니다.")
             return True
 
-
         self.logger.info(f"임베딩 모델 로드 및 시작: {self.model_name}")
         model = SentenceTransformer(self.model_name)
 

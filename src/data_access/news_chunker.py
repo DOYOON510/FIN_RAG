@@ -16,7 +16,7 @@ class NewsChunker:
     """
 
     def __init__(self):
-        self.db = PostgresDB
+        self.db = PostgresDB()
         self.quiz_cleaner = QuizNewsCleaner()
         self.logger = SetupLogger.get_logger()
         self.postgres_insert = PostgresInsert()
