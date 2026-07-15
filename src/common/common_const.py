@@ -63,6 +63,8 @@ class StockConstant:
     """
     token_url = "https://openapi.koreainvestment.com:9443/oauth2/tokenP"
     stock_url = "https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/inquire-price"
+    holiday_url = "https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/chk-holiday"
+
 
 
 
