@@ -33,15 +33,13 @@ def run_stock_collector():
 
     return result
 
-
 def check_stock_result(ti):
     result = ti.xcom_pull(task_ids="collect_today_stock_data")
 
     if not result:
-        return "send_error_notification"
+            return "calculate_stock_price_data"
 
-    return "calculate_stock_price_data"
-
+    return "send_error_notification"
 
 def run_calculate_stock_price_data():
     if PostgresDB is None:
