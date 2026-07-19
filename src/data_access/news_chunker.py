@@ -141,6 +141,7 @@ class NewsChunker:
 
             result.append({
                 "chunking_id": f"{news_id}{idx + 1:02d}",
+                "news_id": news_id,
                 "chunking_index": idx + 1,
                 "news_title": title,
                 "category": row.get("category"),

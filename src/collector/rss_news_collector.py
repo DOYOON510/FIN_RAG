@@ -124,7 +124,7 @@ class RssNewsCollector:
         results = NewsPreprocessor.remove_duplicate_news(results)
         after_count = len(results)
 
-        self.logger.debug(
+        self.logger.info(
             f"RSS 중복 제거 완료: 제거 전={before_count}건, 제거 후={after_count}건"
         )
 
