@@ -71,7 +71,7 @@ class LLMToolCalling:
         return self.stock_service.ask(user_question)
 
 
-    def run_agent(self, user_question: str) -> str:
+    def run_agent(self, user_question: str):
         """
         사용자 질문을 Ollama에 전달하고,
         필요한 도구를 실행한 뒤 최종 답변을 반환한다.
@@ -108,6 +108,12 @@ class LLMToolCalling:
                 "content": user_question,
             },
         ]
+
+        all_result = {
+            "user_question": user_question,
+            "stock_data": None,
+            "news_data": []
+        }
 
         self.logger.info(f"[사용자 질문]: {user_question}")
 
@@ -152,7 +158,8 @@ class LLMToolCalling:
                 # 도구 호출 요청이 없으면 최종 답변
                 if not tool_calls:
                     self.logger.info(f"[LLM 최종 답변 생성 완료] - {assistant_message.content}")
-                    return assistant_message.content
+                    all_result["assistant_message"] = assistant_message.content
+                    return all_result
 
                 # LLM이 호출한 도구를 순서대로 실행
                 for tool_call in tool_calls:
@@ -186,6 +193,15 @@ class LLMToolCalling:
                                 "message": str(error),
                             }
                     self.logger.info(f"[함수 실행 결과] : {json.dumps(tool_result, ensure_ascii=False, indent=2)}")
+
+                    if function_name == "search_news":
+                        if isinstance(tool_result, list):
+                            all_result["news_data"].extend(tool_result)
+
+                    elif function_name == "search_stock":
+                        if isinstance(tool_result, dict) and tool_result.get("success", True):
+                            all_result["stock_data"] = tool_result
+
 
                     # 실행 결과를 다시 LLM에게 전달 (함수 실행 결과를 Tool 메시지로 추가)
                     messages.append(
@@ -223,6 +239,6 @@ if __name__ == "__main__":
 
     question = input("질문을 입력하세요: ")
 
-    answer = tool_calling.run_agent(question)
+    all_result = tool_calling.run_agent(question)
 
-    print(f"\n최종 답변:\n{answer}")
+    print(f"\n최종 답변:\n{all_result['assistant_message']}")
