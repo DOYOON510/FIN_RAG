@@ -5,6 +5,8 @@ import time
 
 from src.common.setup_log import SetupLogger
 from src.llm.prompts import Prompts
+from src.llm.stock_llm_analysis import StockLLMAnalysis
+from src.llm.news_llm_function import NewsRagAnswerService
 
 class LLMToolCalling:
     """
@@ -26,82 +28,47 @@ class LLMToolCalling:
 
     def __init__(self):
         """
-        ToolCalling 클래스 초기 설정.
-
-        - 공통 Logger 생성
-        - 사용할 Ollama 모델 지정
-        - 시스템 프롬프트 객체 생성
-        - LLM이 요청한 함수명과 실제 Python 함수를 연결
+        ToolCalling 클래스 초기 설정
         """
         self.logger = SetupLogger.get_logger()
         # self.MODEL_NAME = "qwen3:4b"
         self.MODEL_NAME = "qwen3:1.7b"
         self.prompts = Prompts()
+        self.news_service = NewsRagAnswerService()
+        self.stock_service = StockLLMAnalysis()
 
-        # LLM이 요청한 함수 이름과 실제 Python 함수를 연결
-        self.AVAILABLE_FUNCTIONS = {
-            "search_news": self.search_news,
-            "search_stock": self.search_stock,
-        }
-
-
-    def search_news(self, ticker_name: str, query: str) -> dict[str, Any]:
+    def search_news(self, user_question: str):
         """
-        기업 또는 산업과 관련된 뉴스, 사건, 이슈, 전망,
-        주가 변동 원인을 검색한다.
+        사용자의 자연어 질문을 기반으로 금융 뉴스 및 기업 관련 정보를 조회하는 도구이다.
 
-        주가 수치, 종가, 수익률을 조회하는 함수는 아니다.
-        사용자가 특정 종목의 주가 상승 또는 하락 이유를 질문하면
-        search_stock 함수와 함께 사용할 수 있다.
+        특정 기업이나 산업과 관련된 최신 뉴스, 실적 발표, 공시, 경제 이슈,
+        주가 변동 원인, 시장 동향 등을 확인하는 질문에 사용한다.
 
-        :param ticker_name: 사용자가 질문에서 언급한 종목명 (종목이 없으면 빈 문자열)
-        :param query: 사용자의 원문 언어를 유지한 뉴스 검색어
-    
-        Returns:
-            뉴스 제목과 요약
+        단순 주가 조회, 기간별 가격 흐름, 거래량 등 시세 데이터 조회에는
+        주식 조회 도구(search_stock)를 사용한다.
+
+        :param user_question: 사용자가 입력한 자연어 질문
+        :return: 질문과 관련된 뉴스 검색 결과(JSON)
         """
-        self.logger.info("\n[Python 함수 실행 : search_news]")
-        self.logger.info(f"search_news(ticker_name={ticker_name}, query={query})")
-    
-        return {
-            "ticker_name": ticker_name,
-            "query": query,
-            "news": [
-                {
-                    "title": f"{ticker_name}, 반도체 실적 전망 하향",
-                    "summary": "시장에서는 반도체 수요 둔화 가능성을 우려하고 있습니다.",
-                }
-            ],
-        }
-    
-    
-    def search_stock(self, ticker_name: str, period_days: int = 30) -> dict[str, Any]:
+        return self.news_service.retrieve_news(question=user_question)
+
+
+    def search_stock(self, user_question: str):
         """
-        특정 종목의 실제 주가, 종가, 수익률, 거래량, 가격 흐름을 조회한다.
-    
-        뉴스나 주가 변동 원인을 검색하는 도구가 아니다.
-        사용자가 주가 상승 또는 하락 이유를 물으면 search_news와 함께 사용한다.
-    
-        Args:
-            ticker_name: 사용자가 언급한 종목명
-            period_days: 최근 조회 기간. 기간이 없으면 30일
-    
-        Returns:
-            시작 종가, 최근 종가, 기간 수익률
+        사용자의 자연어 질문을 기반으로 주가 데이터를 조회하는 도구.
+
+        사용 시점:
+        - 특정 종목의 주가를 조회하는 질문
+        - 기간별 주가 흐름을 확인하는 질문
+        - 시가, 종가, 고가, 저가, 거래량 등 가격 데이터를 조회하는 질문
+
+        사용하지 않는 경우:
+        - 기업 뉴스, 산업 이슈, 실적 발표, 주가 변동 원인 등은 뉴스 조회 도구를 사용한다.
+
+        :param user_question: 사용자가 입력한 자연어 질문
+        :return: 종목별 주가 조회 결과
         """
-        self.logger.info("\n[Python 함수 실행 : search_stock]")
-        self.logger.info(
-            f"search_stock("
-            f"ticker_name={ticker_name}, period_days={period_days})"
-        )
-    
-        return {
-            "ticker_name": ticker_name,
-            "period_days": period_days,
-            "start_close": 70000,
-            "latest_close": 65800,
-            "return_rate": -6.0,
-        }
+        return self.stock_service.ask(user_question)
 
 
     def run_agent(self, user_question: str) -> str:
@@ -121,6 +88,11 @@ class LLMToolCalling:
         :return: LLM이 생성한 최종 자연어 답변
         """
         agent_start_time = time.perf_counter()
+
+        available_functions = {
+            "search_news": self.search_news,
+            "search_stock": self.search_stock,
+        }
 
         # Ollama에 전달할 전체 대화 기록
         messages = [
@@ -154,14 +126,12 @@ class LLMToolCalling:
                 )
 
                 # 현재 LLM 호출에 걸린 시간 계산
-                llm_elapsed_time = (
-                        time.perf_counter() - llm_start_time
-                )
+                llm_elapsed_time = (time.perf_counter() - llm_start_time)
 
                 self.logger.info(f"[LLM 호출 #{loop_count} 완료] - 소요 시간: {llm_elapsed_time}")
                 self.logger.debug(f"response: {response}")
 
-                # Ollama 응답 중 assistant 메시지만 추출 (assistantd에  role, content, tool_calls와 같은 주요 정보가 있음)
+                # Ollama 응답 중 assistant 메시지만 추출 (assistant에  role, content, tool_calls와 같은 주요 정보가 있음)
                 assistant_message = response.message
 
                 # LLM이 생성한 assistant 메시지를 대화 기록에 추가
@@ -195,7 +165,7 @@ class LLMToolCalling:
                     self.logger.info(f"[LLM이 선택한 도구 - 함수명: {function_name}, 인자: {arguments}]")
 
                     # 함수 이름을 이용해 실제 Python 함수 객체를 조회
-                    function = self.AVAILABLE_FUNCTIONS.get(function_name)
+                    function = available_functions.get(function_name)
 
                     # 등록되지 않은 함수 이름을 LLM이 요청한 경우
                     if function is None:
@@ -246,6 +216,7 @@ class LLMToolCalling:
                     time.perf_counter() - agent_start_time
             )
             self.logger.info(f"[Agent 전체 실행 완료] 총 소요 시간: {agent_elapsed_time}")
+
 
 if __name__ == "__main__":
     tool_calling = LLMToolCalling()
