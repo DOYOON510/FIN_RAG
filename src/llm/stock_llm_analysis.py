@@ -1,37 +1,4 @@
 
-"""
-자연어 질문을 받아 LLM이 SQL(SELECT)을 생성하고, 안전 검증 후 실행해
-주가 데이터를 JSON으로 반환하는 모듈 (Text-to-SQL).
-
-처리 흐름:
-  질문 → generate_sql(LLM이 SELECT 생성) → is_safe_sql(안전 검증)
-       → run_query(실행) → 종목별 JSON 변환 → 결과 반환
-
-외부(에이전트)에서 사용하는 공개 API:
-  StockLLMAnalysis().ask(question)
-    입력:  자연어 질문(str)
-    출력:  list[dict] - 종목별 주가 데이터 (실패/결과 없음이면 빈 리스트 [])
-      [
-        {
-          "ticker_name": "삼성전자",
-          "ticker_code": "005930",
-          "period_days": 3,
-          "price_data": [
-            {"trade_date": "2026-07-15", "open_price": 283500,
-             "high_price": 284500, "low_price": 273000, "close_price": 279500},
-            ...
-          ]
-        },
-        ...
-      ]
-
-안전장치:
-  - SELECT 문만 허용 (DROP/DELETE/UPDATE/INSERT 등 차단)
-  - 세미콜론 다중 문장 차단
-  - LIMIT 없으면 자동으로 추가 (결과 폭주 방지)
-  - LLM은 스키마 범위 안에서만 쿼리를 만들도록 프롬프트로 제한
-
-"""
 import sys
 import re
 import json
@@ -64,23 +31,23 @@ class StockLLMAnalysis:
 
     # LLM에게 알려줄 테이블 스키마 (Context) — 환각 방지의 핵심
     SCHEMA_GUIDE = """[테이블] t_stock_price_data (일별 주가 + 계산지표)
-[컬럼]
-- trade_date   (date) : 거래일. 날짜 비교/정렬/INTERVAL 연산 가능
-                 (예: trade_date >= '2026-07-01',
-                      trade_date >= (SELECT MAX(trade_date) ...) - INTERVAL '7 day')
-- ticker_name  (문자열) : 종목명 (예: '경농', '삼성전자')
-- ticker_code  (문자열) : 종목코드
-- open_price   (숫자) : 시가
-- high_price   (숫자) : 고가
-- low_price    (숫자) : 저가
-- close_price  (숫자) : 종가
-- volume       (정수) : 거래량
-- daily_change (숫자, 비율) : 전일대비 등락률 (0.0022 = +0.22%)
-- ma_20        (숫자) : 20일 이동평균
-- volatility   (숫자) : 변동성
-- dd_high      (숫자, 비율) : 고점대비 낙폭 (음수)
-- ret_low      (숫자, 비율) : 저점대비 수익률 (양수)
-- del_yn       (불리언) : 삭제 여부. 조회 시 반드시 del_yn = false 조건 포함"""
+                      [컬럼]
+                            - trade_date   (date) : 거래일. 날짜 비교/정렬/INTERVAL 연산 가능
+                                           (예: trade_date >= '2026-07-01',
+                                           trade_date >= (SELECT MAX(trade_date) ...) - INTERVAL '7 day')
+                            - ticker_name  (문자열) : 종목명 (예: '경농', '삼성전자')
+                            - ticker_code  (문자열) : 종목코드
+                            - open_price   (숫자) : 시가
+                            - high_price   (숫자) : 고가
+                            - low_price    (숫자) : 저가
+                            - close_price  (숫자) : 종가
+                            - volume       (정수) : 거래량
+                            - daily_change (숫자, 비율) : 전일대비 등락률 (0.0022 = +0.22%)
+                            - ma_20        (숫자) : 20일 이동평균
+                            - volatility   (숫자) : 변동성
+                            - dd_high      (숫자, 비율) : 고점대비 낙폭 (음수)
+                            - ret_low      (숫자, 비율) : 저점대비 수익률 (양수)
+                            - del_yn       (불리언) : 삭제 여부. 조회 시 반드시 del_yn = false 조건 포함"""
 
     def __init__(self):
         self.logger = SetupLogger.get_logger()
@@ -137,65 +104,65 @@ class StockLLMAnalysis:
         prompt = f"""당신은 PostgreSQL 전문가입니다. 아래 스키마를 참고해 질문에 답하는
                     SELECT 쿼리 하나만 생성하세요. 설명 없이 SQL만 출력하세요.
 
-{self.SCHEMA_GUIDE}
-
-{date_context}
-
-규칙:
-- 반드시 SELECT 문만 작성하세요. 데이터를 변경하는 문(INSERT/UPDATE/DELETE/DROP 등)은 금지입니다.
-- 항상 WHERE 조건에 del_yn = false 를 포함하세요.
-- INTERVAL 등 날짜 연산은 사용할 수 있습니다. 단 CURRENT_DATE, NOW()는 절대 쓰지 마세요.
-  ('오늘'은 실제 달력 날짜가 아니라 데이터의 최신 거래일 MAX(trade_date)를 뜻합니다)
-- 스키마에 없는 테이블/컬럼은 절대 쓰지 마세요.
-- 결과가 많을 수 있으면 LIMIT 을 붙이세요.
-- SELECT 절에 가능하면 ticker_name, ticker_code, trade_date 를 포함하세요.
-  (결과를 종목별 JSON으로 묶는 데 필요합니다)
-
-자주 하는 질문의 올바른 쿼리 예시:
-
-예시1) "경농 최근 5일 종가 보여줘" (특정 종목의 최근 N일 → 그 종목만 필터 후 정렬+LIMIT)
-SELECT ticker_name, ticker_code, trade_date, open_price, high_price, low_price, close_price
-FROM t_stock_price_data
-WHERE ticker_name = '경농' AND del_yn = false
-ORDER BY trade_date DESC
-LIMIT 5
-
-예시2) "오늘 종가가 가장 높은 종목 5개는?" (오늘/최신일 → MAX(trade_date) 서브쿼리)
-SELECT ticker_name, ticker_code, trade_date, close_price
-FROM t_stock_price_data
-WHERE trade_date = (SELECT MAX(trade_date) FROM t_stock_price_data WHERE del_yn = false)
-  AND del_yn = false
-ORDER BY close_price DESC
-LIMIT 5
-
-예시3) "최신일 기준 거래량 가장 많은 종목 3개" (랭킹도 최신일 필터 먼저)
-SELECT ticker_name, ticker_code, trade_date, volume
-FROM t_stock_price_data
-WHERE trade_date = (SELECT MAX(trade_date) FROM t_stock_price_data WHERE del_yn = false)
-  AND del_yn = false
-ORDER BY volume DESC
-LIMIT 3
-
-예시4) "삼성전자 최근 3일 시가 고가 저가 종가" (특정 종목의 최근 N일은 예시1과 같은 패턴)
-SELECT ticker_name, ticker_code, trade_date, open_price, high_price, low_price, close_price
-FROM t_stock_price_data
-WHERE ticker_name = '삼성전자' AND del_yn = false
-ORDER BY trade_date DESC
-LIMIT 3
-
-예시5) "최근 일주일 거래량 가장 높은 종목은?" (전체 종목의 최근 N일 → 최근 거래일 목록 서브쿼리)
-SELECT ticker_name, ticker_code, trade_date, volume
-FROM t_stock_price_data
-WHERE trade_date IN (
-    SELECT DISTINCT trade_date FROM t_stock_price_data
-    WHERE del_yn = false ORDER BY trade_date DESC LIMIT 7
-) AND del_yn = false
-ORDER BY volume DESC
-LIMIT 5
-{error_block}
-질문: "{question}"
-
-SQL:"""
+                {self.SCHEMA_GUIDE}
+                
+                {date_context}
+                
+                규칙:
+                - 반드시 SELECT 문만 작성하세요. 데이터를 변경하는 문(INSERT/UPDATE/DELETE/DROP 등)은 금지입니다.
+                - 항상 WHERE 조건에 del_yn = false 를 포함하세요.
+                - INTERVAL 등 날짜 연산은 사용할 수 있습니다. 단 CURRENT_DATE, NOW()는 절대 쓰지 마세요.
+                  ('오늘'은 실제 달력 날짜가 아니라 데이터의 최신 거래일 MAX(trade_date)를 뜻합니다)
+                - 스키마에 없는 테이블/컬럼은 절대 쓰지 마세요.
+                - 결과가 많을 수 있으면 LIMIT 을 붙이세요.
+                - SELECT 절에 가능하면 ticker_name, ticker_code, trade_date 를 포함하세요.
+                  (결과를 종목별 JSON으로 묶는 데 필요합니다)
+                
+                자주 하는 질문의 올바른 쿼리 예시:
+                
+                예시1) "경농 최근 5일 종가 보여줘" (특정 종목의 최근 N일 → 그 종목만 필터 후 정렬+LIMIT)
+                SELECT ticker_name, ticker_code, trade_date, open_price, high_price, low_price, close_price
+                FROM t_stock_price_data
+                WHERE ticker_name = '경농' AND del_yn = false
+                ORDER BY trade_date DESC
+                LIMIT 5
+                
+                예시2) "오늘 종가가 가장 높은 종목 5개는?" (오늘/최신일 → MAX(trade_date) 서브쿼리)
+                SELECT ticker_name, ticker_code, trade_date, close_price
+                FROM t_stock_price_data
+                WHERE trade_date = (SELECT MAX(trade_date) FROM t_stock_price_data WHERE del_yn = false)
+                  AND del_yn = false
+                ORDER BY close_price DESC
+                LIMIT 5
+                
+                예시3) "최신일 기준 거래량 가장 많은 종목 3개" (랭킹도 최신일 필터 먼저)
+                SELECT ticker_name, ticker_code, trade_date, volume
+                FROM t_stock_price_data
+                WHERE trade_date = (SELECT MAX(trade_date) FROM t_stock_price_data WHERE del_yn = false)
+                  AND del_yn = false
+                ORDER BY volume DESC
+                LIMIT 3
+                
+                예시4) "삼성전자 최근 3일 시가 고가 저가 종가" (특정 종목의 최근 N일은 예시1과 같은 패턴)
+                SELECT ticker_name, ticker_code, trade_date, open_price, high_price, low_price, close_price
+                FROM t_stock_price_data
+                WHERE ticker_name = '삼성전자' AND del_yn = false
+                ORDER BY trade_date DESC
+                LIMIT 3
+                
+                예시5) "최근 일주일 거래량 가장 높은 종목은?" (전체 종목의 최근 N일 → 최근 거래일 목록 서브쿼리)
+                SELECT ticker_name, ticker_code, trade_date, volume
+                FROM t_stock_price_data
+                WHERE trade_date IN (
+                    SELECT DISTINCT trade_date FROM t_stock_price_data
+                    WHERE del_yn = false ORDER BY trade_date DESC LIMIT 7
+                ) AND del_yn = false
+                ORDER BY volume DESC
+                LIMIT 5
+                {error_block}
+                질문: "{question}"
+                
+                SQL:"""
 
         response = ollama.chat(
             model=OLLAMA_MODEL,
@@ -205,6 +172,7 @@ SQL:"""
         # 마크다운 코드펜스 제거 (```sql ... ``` 형태로 감싸는 경우 대비)
         sql = re.sub(r"^```[a-zA-Z]*\s*", "", sql)
         sql = re.sub(r"\s*```$", "", sql).strip()
+        self.logger.debug(f"[LLM 생성 SQL] question={question!r}\n{sql}")
         return sql
 
     def is_safe_sql(self, sql):
@@ -275,31 +243,6 @@ SQL:"""
             columns = list(result.keys())
             rows = result.fetchall()
         return columns, rows
-
-    @staticmethod
-    def format_table(columns, rows):
-        """
-        조회 결과를 파이프(|)로 구분된 표 문자열로 변환
-
-        param columns: 컬럼명 목록(list[str])
-        param rows: 행 데이터(list[tuple])
-
-        return: str - 표 문자열 (결과 없으면 안내 문구)
-        """
-        if not rows:
-            return "(조회 결과가 없습니다)"
-        lines = [" | ".join(columns)]
-        for row in rows:
-            cells = []
-            for v in row:
-                if isinstance(v, float):
-                    cells.append(f"{v:,.4f}".rstrip("0").rstrip("."))
-                elif isinstance(v, int):
-                    cells.append(f"{v:,}")
-                else:
-                    cells.append(str(v))
-            lines.append(" | ".join(cells))
-        return "\n".join(lines)
 
     @staticmethod
     def _to_plain(value):
@@ -397,6 +340,7 @@ SQL:"""
                         "message": f"안전하지 않은 쿼리라 실행하지 않음: {reason}"}
 
             sql = self.enforce_limit(sql)
+            self.logger.debug(f"[실행 SQL] (시도 {attempt})\n{sql}")
 
             try:
                 columns, rows = self.run_query(sql)
@@ -413,20 +357,35 @@ SQL:"""
 
     def ask(self, question):
         """
-        [공개 API] 자연어 질문 → 종목별 주가 데이터 리스트 반환
+        [공개 API] 자연어 질문을 받아 LLM이 SQL(SELECT)을 생성하고,
+        안전 검증 후 실행해 주가 데이터를 종목별 JSON으로 반환한다 (Text-to-SQL).
 
-        에이전트(Tool Calling) 등 외부 코드가 호출하는 진입점.
+        에이전트(Tool Calling) 등 외부 코드가 호출하는 진입점. 예외를 던지지 않는다.
+
+        처리 흐름:
+          질문 → generate_sql(LLM이 SELECT 생성) → is_safe_sql(안전 검증)
+               → enforce_limit(LIMIT 보정) → run_query(실행)
+               → rows_to_json(종목별 JSON 변환) → 결과 반환
+          (실행 에러 시 에러 메시지를 LLM에게 돌려주고 1회 재생성하는 자가 교정 포함)
+
+        안전장치:
+          - SELECT 문만 허용 (DROP/DELETE/UPDATE/INSERT 등 차단)
+          - 세미콜론 다중 문장 차단
+          - LIMIT 없으면 자동으로 추가 (결과 폭주 방지)
+          - LLM은 스키마 범위 안에서만 쿼리를 만들도록 프롬프트로 제한
 
         param question: 사용자 자연어 질문(str)
+                        예: "삼성전자 최근 5일 종가", "오늘 거래량 가장 많은 종목 3개"
 
         return: list[dict] - 종목별 주가 데이터. 실패하거나 결과가 없으면 빈 리스트 []
             [
               {
                 "ticker_name": "삼성전자",
                 "ticker_code": "005930",
-                "period_days": 3,
-                "price_data": [
-                  {"trade_date": "2026-07-15", "open_price": 283500, ...},
+                "period_days": 3,                  # 실제 조회된 거래일 수
+                "price_data": [                    # 날짜 오름차순
+                  {"trade_date": "2026-07-15", "open_price": 283500,
+                   "high_price": 284500, "low_price": 273000, "close_price": 279500},
                   ...
                 ]
               },
@@ -435,35 +394,18 @@ SQL:"""
         """
         return self._ask_detail(question)["data"]
 
-    def run(self, question):
-        """
-        대화형 모드용: 상세 결과(SQL 포함)를 사람이 읽기 좋게 화면에 출력
-
-        param question: 사용자 자연어 질문(str)
-        """
-        print("SQL 생성/실행 중...")
-        result = self._ask_detail(question)
-
-        print(f"\n=== 생성된 SQL ===\n{result['sql']}")
-        if not result["success"]:
-            print(f"\n실패: {result['message']}")
-            return
-
-        print("\n=== 결과 (JSON) ===")
-        print(json.dumps(result["data"], ensure_ascii=False, indent=2))
-
 
 def main():
+    """
+    단독 테스트용 대화형 모드 (import 해서 쓸 때는 실행되지 않음)
+
+    질문을 입력받아 ask() 결과(JSON)만 출력한다.
+    생성/실행된 SQL은 화면에 노출하지 않고 DEBUG 로그로만 남는다.
+    """
     sys.stdout.reconfigure(encoding="utf-8")  # 출력 한글 깨짐 방지
     sys.stdin.reconfigure(encoding="utf-8")   # 입력 한글 깨짐 방지
     analyzer = StockLLMAnalysis()
 
-    # 대화형 모드: 질문을 입력받아 여러 번 물어볼 수 있다
-    print("=" * 50)
-    print("주가 쿼리 챗봇 (종료: 빈 줄 입력 또는 Ctrl+C)")
-    print('예) "경농 최근 10일 종가 보여줘"')
-    print('    "오늘 종가가 가장 높은 종목 5개는?"')
-    print("=" * 50)
     while True:
         try:
             question = input("\n질문> ").strip()
@@ -473,7 +415,11 @@ def main():
         if not question:
             print("종료합니다.")
             break
-        analyzer.run(question)
+        data = analyzer.ask(question)
+        if data:
+            print(json.dumps(data, ensure_ascii=False, indent=2))
+        else:
+            print("(조회 결과가 없습니다. 질문을 바꿔서 다시 시도해 보세요.)")
 
 
 if __name__ == "__main__":
