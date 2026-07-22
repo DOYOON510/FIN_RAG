@@ -111,7 +111,7 @@ class LLMToolCalling:
 
         all_result = {
             "user_question": user_question,
-            "stock_data": None,
+            "stock_data": [],
             "news_data": []
         }
 
@@ -184,7 +184,7 @@ class LLMToolCalling:
                     else:
                         try:
                             # arguments 딕셔너리를 키워드 인자로 풀어서 실제 Python 함수 실행
-                            tool_result = function(**arguments)
+                            tool_result = function(user_question=user_question)
                         except Exception as error:
                             # 함수 실행 중 오류가 발생한 경우
                             self.logger.error(f"[도구 실행 오류] - {function_name}")
@@ -194,13 +194,12 @@ class LLMToolCalling:
                             }
                     self.logger.info(f"[함수 실행 결과] : {json.dumps(tool_result, ensure_ascii=False, indent=2)}")
 
-                    if function_name == "search_news":
-                        if isinstance(tool_result, list):
+                    if isinstance(tool_result, list):
+                        if function_name == "search_news":
                             all_result["news_data"].extend(tool_result)
 
-                    elif function_name == "search_stock":
-                        if isinstance(tool_result, dict) and tool_result.get("success", True):
-                            all_result["stock_data"] = tool_result
+                        elif function_name == "search_stock":
+                            all_result["stock_data"].extend(tool_result)
 
 
                     # 실행 결과를 다시 LLM에게 전달 (함수 실행 결과를 Tool 메시지로 추가)
