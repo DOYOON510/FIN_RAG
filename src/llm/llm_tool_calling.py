@@ -50,7 +50,7 @@ class LLMToolCalling:
         :param user_question: 사용자가 입력한 자연어 질문
         :return: 질문과 관련된 뉴스 검색 결과(JSON)
         """
-        return self.news_service.retrieve_news(question=user_question)
+        return self.news_service.ask(user_question)
 
 
     def search_stock(self, user_question: str):
