@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,55 +10,35 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
+from src.common.setup_log import SetupLogger
+
 EMBEDDING_MODEL_NAME = "nlpai-lab/KURE-v1"
-
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
-OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "180"))
-OLLAMA_NUM_PREDICT = int(os.getenv("OLLAMA_NUM_PREDICT", "768"))
-
-# 여기만 바꿔서 테스트하면 됩니다.
-USER_QUESTION = "삼성전자 AI 투자 관련 최근 뉴스 알려줘"
-USER_LIMIT = 5
-USER_MIN_SIMILARITY = None
+DEFAULT_LIMIT = 5
 
 
 @dataclass
 class RetrievedNewsChunk:
     """
-    벡터 DB에서 검색된 뉴스 청크 객체
-
-    저장 내용:
-    - 뉴스 제목
-    - 본문 청크
-    - 유사도
-    - URL
-    - 발행일
+    Vector DB에서 검색된 뉴스 청크.
     """
+
     chunking_id: str
     news_id: str | None
     news_title: str | None
+    publisher_name: str | None
     category: str | None
     published_date: str | None
     url: str | None
     chunking_text: str
     similarity: float
 
-    def to_context_dict(self) -> dict[str, Any]:
-        """
-        뉴스 청크를 Ollama 입력용 Dictionary로 변환
-
-        처리 내용:
-        1. 객체 → Dictionary 변환
-        2. similarity 반올림
-        3. LLM 입력용 데이터 생성
-
-        :return: Dictionary 형태 뉴스 정보
-        """
+    def to_json_dict(self) -> dict[str, Any]:
+        # Tool Calling 결과와 Streamlit 화면에서 바로 사용할 수 있는 JSON 형태로 변환
         return {
             "chunking_id": self.chunking_id,
             "news_id": self.news_id,
             "news_title": self.news_title,
+            "publisher_name": self.publisher_name,
             "category": self.category,
             "published_date": self.published_date,
             "url": self.url,
@@ -70,69 +49,50 @@ class RetrievedNewsChunk:
 
 class NewsVectorRepository:
     """
-    뉴스 벡터 DB 조회를 담당하는 클래스
-
-    처리 내용:
-    1. PostgreSQL 연결
-    2. 질문과 유사한 뉴스 검색
-    3. 검색 결과 객체 변환
+    질문 임베딩과 유사한 뉴스 청크를 pgvector로 조회한다.
     """
+
     def __init__(self, db: Any | None = None):
-        """
-        Repository 초기화
-
-        처리 내용:
-        1. PostgreSQL 연결 객체 생성
-        2. DB 객체 저장
-
-        :param db: PostgreSQL 연결 객체
-        """
         if db is None:
             from src.database.connect_postgres import PostgresDB
 
             db = PostgresDB()
 
+        self.logger = SetupLogger.get_logger()
         self.db = db
 
     def search_similar_news(
-            self,
-            question_embedding: list[float],
-            limit: int = 5,
-            min_similarity: float | None = None,
+        self,
+        question_embedding: list[float],
+        limit: int = DEFAULT_LIMIT,
+        min_similarity: float | None = None,
     ) -> list[RetrievedNewsChunk]:
-        """
-        질문과 유사한 뉴스 검색
-
-        처리 흐름:
-        1. 질문 임베딩을 pgvector 형식으로 변환
-        2. 벡터 유사도 검색
-        3. 유사도 순 정렬
-        4. 검색 결과 반환
-
-        :param question_embedding: 질문 임베딩 벡터
-        :param limit: 검색할 뉴스 개수
-        :param min_similarity: 최소 유사도
-        :return: 검색된 뉴스 리스트
-        """
         from sqlalchemy import text
 
+        # pgvector의 vector 타입으로 CAST할 수 있는 문자열 형태로 변환
         query_vector = self._to_pgvector_literal(question_embedding)
 
+        # 질문 임베딩과 뉴스 청크 임베딩 간 cosine distance가 가까운 순서로 조회
         sql = """
-              SELECT chunking_id,
-                     news_id,
-                     news_title,
-                     category,
-                     published_date,
-                     url,
-                     chunking_text,
-                     1 - (embedding_vector <=> CAST(:query_vector AS vector)) AS similarity
-              FROM t_vector_data
-              WHERE embedding_yn = TRUE
-                AND embedding_vector IS NOT NULL
-                AND embedding_model = :embedding_model
-                AND COALESCE(del_yn, FALSE) = FALSE 
-              """
+            SELECT
+                v.chunking_id,
+                v.news_id,
+                COALESCE(v.news_title, n.news_title) AS news_title,
+                n.publisher_name,
+                COALESCE(v.category, n.category) AS category,
+                COALESCE(v.published_date, n.published_date) AS published_date,
+                COALESCE(v.url, n.url) AS url,
+                v.chunking_text,
+                1 - (v.embedding_vector <=> CAST(:query_vector AS vector)) AS similarity
+            FROM t_vector_data v
+            LEFT JOIN t_news_data n
+                ON v.news_id = n.news_id
+            WHERE v.embedding_yn = TRUE
+              AND v.embedding_vector IS NOT NULL
+              AND v.embedding_model = :embedding_model
+              AND COALESCE(v.del_yn, FALSE) = FALSE
+              AND COALESCE(n.del_yn, FALSE) = FALSE
+        """
 
         params: dict[str, Any] = {
             "query_vector": query_vector,
@@ -141,25 +101,35 @@ class NewsVectorRepository:
         }
 
         if min_similarity is not None:
+            # 최소 유사도가 지정된 경우 기준 미만 뉴스는 제외
             sql += """
-              AND 1 - (embedding_vector <=> CAST(:query_vector AS vector)) >= :min_similarity
+              AND 1 - (v.embedding_vector <=> CAST(:query_vector AS vector)) >= :min_similarity
             """
             params["min_similarity"] = min_similarity
 
         sql += """
-            ORDER BY embedding_vector <=> CAST(:query_vector AS vector)
+            ORDER BY v.embedding_vector <=> CAST(:query_vector AS vector)
             LIMIT :limit
         """
+
+        self.logger.info(
+            f"[뉴스 벡터 검색 시작] limit={limit}, "
+            f"min_similarity={min_similarity}, model={EMBEDDING_MODEL_NAME}"
+        )
 
         with self.db.get_postgres_db() as session:
             result = session.execute(text(sql), params)
             rows = [dict(row._mapping) for row in result]
 
+        self.logger.info(f"[뉴스 벡터 검색 완료] 검색 결과 {len(rows)}건")
+
+        # DB row를 내부 데이터 객체로 변환해서 이후 JSON 변환을 안정적으로 처리
         return [
             RetrievedNewsChunk(
                 chunking_id=str(row["chunking_id"]),
                 news_id=str(row["news_id"]) if row.get("news_id") is not None else None,
                 news_title=row.get("news_title"),
+                publisher_name=row.get("publisher_name"),
                 category=row.get("category"),
                 published_date=self._format_date(row.get("published_date")),
                 url=row.get("url"),
@@ -171,31 +141,12 @@ class NewsVectorRepository:
 
     @staticmethod
     def _to_pgvector_literal(vector: list[float]) -> str:
-        """
-        Python 리스트를 pgvector 문자열로 변환
-
-        처리 내용:
-        1. float 리스트를 문자열로 변환
-        2. pgvector 형식([1,2,3]) 생성
-
-        :param vector: 임베딩 벡터
-        :return: pgvector 문자열
-        """
+        # pgvector는 "[0.1,0.2,...]" 형식의 문자열을 vector로 캐스팅할 수 있음
         return "[" + ",".join(str(float(value)) for value in vector) + "]"
 
     @staticmethod
     def _format_date(value: Any) -> str | None:
-        """
-        날짜 데이터를 문자열로 변환
-
-        처리 내용:
-        1. None 처리
-        2. datetime → YYYY-MM-DD 변환
-        3. 문자열 반환
-
-        :param value: 날짜 데이터
-        :return: 날짜 문자열
-        """
+        # date/datetime 타입은 JSON에 넣기 쉬운 YYYY-MM-DD 문자열로 변환
         if value is None:
             return None
         if hasattr(value, "strftime"):
@@ -205,232 +156,119 @@ class NewsVectorRepository:
 
 class NewsRagAnswerService:
     """
-    뉴스 RAG 전체 실행을 담당하는 서비스 클래스
-
-    처리 내용:
-    1. 임베딩 모델 로드
-    2. 사용자 질문 임베딩
-    3. 유사 뉴스 검색
-    4. Ollama 기반 답변 생성
+    Tool Calling에서 넘어온 사용자 질문을 임베딩하고 관련 뉴스 JSON을 반환한다.
     """
+
     def __init__(
-            self,
-            repository: NewsVectorRepository | None = None,
-            embedding_model_name: str = EMBEDDING_MODEL_NAME,
+        self,
+        repository: NewsVectorRepository | None = None,
+        embedding_model_name: str = EMBEDDING_MODEL_NAME,
     ):
-        """
-        뉴스 RAG 서비스 초기화
-
-        처리 내용:
-        1. 뉴스 Repository 생성
-        2. 임베딩 모델명 저장
-        3. SentenceTransformer 모델 로드
-
-        :param repository: 뉴스 벡터 조회 객체
-        :param embedding_model_name: 사용할 임베딩 모델명
-        """
         from sentence_transformers import SentenceTransformer
 
+        self.logger = SetupLogger.get_logger()
         self.repository = repository or NewsVectorRepository()
         self.embedding_model_name = embedding_model_name
+
+        self.logger.info(f"[뉴스 임베딩 모델 로드 시작] model={embedding_model_name}")
         self.embedding_model = SentenceTransformer(embedding_model_name)
+        self.logger.info("[뉴스 임베딩 모델 로드 완료]")
 
     def embed_question(self, question: str) -> list[float]:
-        """
-        사용자 질문을 임베딩 벡터로 변환
-
-        처리 흐름:
-        1. 질문 문자열 입력
-        2. SentenceTransformer 임베딩 수행
-        3. 정규화된 벡터 반환
-
-        :param question: 사용자 질문
-        :return: 질문 임베딩 벡터
-        """
+        # llm_tool_calling에서 넘어온 원문 질문을 그대로 임베딩
+        self.logger.info(f"[질문 임베딩 시작] question={question}")
         return self.embedding_model.encode(
             question,
-            normalize_embeddings=True,  ## 백터 길이 정규화
-            show_progress_bar=False,    ## 진행 바 표시x
+            normalize_embeddings=True,
+            show_progress_bar=False,
         ).tolist()
 
     def retrieve_news(
-            self,
-            question: str,
-            limit: int = 5,
-            min_similarity: float | None = None,
+        self,
+        question: str,
+        limit: int = DEFAULT_LIMIT,
+        min_similarity: float | None = None,
     ) -> list[RetrievedNewsChunk]:
-        """
-        질문과 유사한 뉴스 검색
-
-        처리 흐름:
-        1. 사용자 질문 임베딩
-        2. 벡터 DB 유사도 검색
-        3. 검색된 뉴스 리스트 반환
-
-        :param question: 사용자 질문
-        :param limit: 검색할 뉴스 개수
-        :param min_similarity: 최소 유사도
-        :return: 검색된 뉴스 리스트
-        """
+        # 질문을 먼저 임베딩한 뒤, 유사도 높은 뉴스 청크를 DB에서 조회
         question_embedding = self.embed_question(question)
-        return self.repository.search_similar_news(
+        news_chunks = self.repository.search_similar_news(
             question_embedding=question_embedding,
             limit=limit,
             min_similarity=min_similarity,
         )
+        self.logger.info(f"[관련 뉴스 조회 완료] question={question}, count={len(news_chunks)}")
+        return news_chunks
+
+    def ask(
+        self,
+        question: str,
+        limit: int = DEFAULT_LIMIT,
+        min_similarity: float | None = None,
+    ) -> list[dict[str, Any]]:
+        """
+        공개 API. stock_llm_analysis.ask()처럼 JSON 직렬화 가능한 list[dict]만 반환한다.
+        """
+        if not question or not question.strip():
+            self.logger.warning("[뉴스 조회 생략] 빈 질문이 입력됨")
+            return []
+
+        # Tool Calling에서 호출되는 진입점: 질문 기반 검색 결과만 JSON list로 반환
+        news_chunks = self.retrieve_news(
+            question=question.strip(),
+            limit=limit,
+            min_similarity=min_similarity,
+        )
+        news_data = [news_chunk.to_json_dict() for news_chunk in news_chunks]
+
+        if not news_data:
+            self.logger.warning(f"[관련 뉴스 없음] question={question}")
+        else:
+            self.logger.info(f"[뉴스 JSON 변환 완료] count={len(news_data)}")
+
+        return news_data
 
     def answer_question(
-            self,
-            question: str,
-            limit: int = 5,
-            min_similarity: float | None = None,
+        self,
+        question: str,
+        limit: int = DEFAULT_LIMIT,
+        min_similarity: float | None = None,
     ) -> dict[str, Any]:
         """
-        뉴스 데이터를 기반으로 사용자 질문에 답변
-
-        처리 흐름:
-        1. 질문과 관련된 뉴스 검색
-        2. 검색 결과 존재 여부 확인
-        3. 검색된 뉴스를 Ollama에 전달
-        4. 답변과 근거 뉴스 반환
-
-        :param question: 사용자 질문
-        :param limit: 검색할 뉴스 개수
-        :param min_similarity: 최소 유사도
-        :return: 질문, 답변, 검색 뉴스 정보
+        기존 호출부 호환용. 별도 LLM 답변 생성 없이 검색 결과만 JSON으로 반환한다.
         """
-        retrieved_news = self.retrieve_news(
+        # 예전 answer_question 호출부가 깨지지 않도록 동일한 검색 결과를 감싸서 반환
+        news_data = self.ask(
             question=question,
             limit=limit,
             min_similarity=min_similarity,
         )
-
-        if not retrieved_news:
-            return {
-                "question": question,
-                "answer": "관련도가 충분한 뉴스 데이터를 찾지 못했습니다.",
-                "retrieved_news": [],
-            }
-
-        answer = call_ollama_for_news_answer(question, retrieved_news)
-
         return {
             "question": question,
-            "answer": answer,
-            "retrieved_news": [
-                news_chunk.to_context_dict()
-                for news_chunk in retrieved_news
-            ],
+            "answer": "",
+            "retrieved_news": news_data,
         }
 
 
-def call_ollama_for_news_answer(
-        question: str,
-        retrieved_news: list[RetrievedNewsChunk],
-) -> str:
-    import requests
-
-    system_prompt = """
-너는 금융 뉴스 RAG 답변을 작성하는 한국어 어시스턴트다.
-반드시 제공된 뉴스 컨텍스트만 근거로 답한다.
-확인되지 않은 사실, 투자 추천, 수익 보장 표현은 하지 않는다.
-답변은 다음 형식을 지킨다.
-
-1. 핵심 답변: 질문에 직접 답하는 2~4문장
-2. 근거 뉴스: 관련 뉴스 제목과 날짜를 짧게 정리
-3. 참고: 데이터만으로 확정하기 어려운 부분
-""".strip()
-
-    context = [
-        news_chunk.to_context_dict()
-        for news_chunk in retrieved_news
-    ]
-
-    user_prompt = f"""
-사용자 질문:
-{question}
-
-검색된 뉴스 컨텍스트:
-{json.dumps(context, ensure_ascii=False, indent=2)}
-
-위 뉴스 컨텍스트만 근거로 질문에 답해줘.
-""".strip()
-
-    payload = {
-        "model": OLLAMA_MODEL,
-        "stream": False,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "options": {
-            "temperature": 0.2, #창의성(거의 사실 위주)
-            "num_predict": OLLAMA_NUM_PREDICT,  #최대 생성 토큰
-        },
-    }
-
-    try:
-        response = requests.post(
-            f"{OLLAMA_HOST}/api/chat",
-            json=payload,
-            timeout=OLLAMA_TIMEOUT,
-        )
-    except requests.exceptions.ReadTimeout as exc:
-        raise RuntimeError(
-            f"Ollama answer timed out after {OLLAMA_TIMEOUT} seconds. "
-            "Try a smaller model or increase OLLAMA_TIMEOUT."
-        ) from exc
-
-    if response.status_code == 404:
-        response = requests.post(
-            f"{OLLAMA_HOST}/api/generate",
-            json={
-                "model": OLLAMA_MODEL,
-                "stream": False,
-                "prompt": f"{system_prompt}\n\n{user_prompt}",
-                "options": {
-                    "temperature": 0.2,
-                    "num_predict": OLLAMA_NUM_PREDICT,
-                },
-            },
-            timeout=OLLAMA_TIMEOUT,
-        )
-        response.raise_for_status()
-        return response.json()["response"].strip()
-
-    response.raise_for_status()
-    return response.json()["message"]["content"].strip()
-
-
 def main() -> None:
-    question = USER_QUESTION.strip()
-
-    if not question:
-        raise ValueError("USER_QUESTION에 질문을 입력해주세요.")
-
-    print(f"[question] {question}")
-    print(f"[embedding] model={EMBEDDING_MODEL_NAME}")
-    print(f"[ollama] host={OLLAMA_HOST}, model={OLLAMA_MODEL}")
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdin.reconfigure(encoding="utf-8")
 
     service = NewsRagAnswerService()
-    result = service.answer_question(
-        question=question,
-        limit=USER_LIMIT,
-        min_similarity=USER_MIN_SIMILARITY,
-    )
 
-    print("[answer]")
-    print(result["answer"])
+    while True:
+        try:
+            # 단독 테스트용 입력. 실제 서비스 흐름에서는 llm_tool_calling에서 질문이 넘어옴
+            question = input("\n질문> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n종료합니다.")
+            break
 
-    print("[retrieved_news]")
-    for news_chunk in result["retrieved_news"]:
-        print(
-            "- "
-            f"similarity={news_chunk['similarity']} | "
-            f"{news_chunk['published_date']} | "
-            f"{news_chunk['news_title']} | "
-            f"{news_chunk['url']}"
-        )
+        if not question:
+            print("종료합니다.")
+            break
+
+        news_data = service.ask(question)
+        print(json.dumps(news_data, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
