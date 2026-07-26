@@ -81,7 +81,7 @@ class TestEmbeddingModels:
 
         result_rows = []
 
-        for query_name, query in self.test_query_dict.items():
+        for query in self.test_query_dict:
 
             query_embedding = model.encode(
                 [query],
@@ -95,7 +95,7 @@ class TestEmbeddingModels:
 
             top_indices = scores.argsort()[::-1][:5]
 
-            print(f"\n[{model_name}] {query_name}: {query}")
+            print(f"\n[{model_name}]: {query}")
 
             for rank, idx in enumerate(top_indices, start=1):
                 news = news_data[idx]
@@ -109,7 +109,6 @@ class TestEmbeddingModels:
 
                 result_rows.append({
                     "model_name": model_name,
-                    "query_name": query_name,
                     "query": query,
                     "rank": rank,
                     "news_id": news["news_id"],
@@ -129,7 +128,6 @@ class TestEmbeddingModels:
 
         fieldnames = [
             "model_name",
-            "query_name",
             "query",
             "rank",
             "news_id",

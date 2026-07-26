@@ -63,6 +63,8 @@ class StockConstant:
     """
     token_url = "https://openapi.koreainvestment.com:9443/oauth2/tokenP"
     stock_url = "https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/inquire-price"
+    holiday_url = "https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/chk-holiday"
+
 
 
 
@@ -179,15 +181,15 @@ class NewsCollectorConfig:
             "증권": "https://www.mk.co.kr/rss/50200011/",
             "부동산": "https://www.mk.co.kr/rss/50300009/",
         },
-        "한국경제": {
-            "증권": "https://www.hankyung.com/feed/finance",
-            "경제": "https://www.hankyung.com/feed/economy",
-            "부동산": "https://www.hankyung.com/feed/realestate",
-            "IT": "https://www.hankyung.com/feed/it",
-            "정치": "https://www.hankyung.com/feed/politics",
-            "국제": "https://www.hankyung.com/feed/international",
-            "사회": "https://www.hankyung.com/feed/society",
-        },
+        # "한국경제": {
+        #     "증권": "https://www.hankyung.com/feed/finance",
+        #     "경제": "https://www.hankyung.com/feed/economy",
+        #     "부동산": "https://www.hankyung.com/feed/realestate",
+        #     "IT": "https://www.hankyung.com/feed/it",
+        #     "정치": "https://www.hankyung.com/feed/politics",
+        #     "국제": "https://www.hankyung.com/feed/international",
+        #     "사회": "https://www.hankyung.com/feed/society",
+        # },
         "국민일보": {
             "경제": "https://www.kmib.co.kr/rss/data/kmibEcoRss.xml",
             "정치": "https://www.kmib.co.kr/rss/data/kmibPolRss.xml",
@@ -195,23 +197,3 @@ class NewsCollectorConfig:
             "사회": "https://www.kmib.co.kr/rss/data/kmibSocRss.xml",
         }
     }
-
-
-class EbeddingTestQuery:
-    test_query_dict = {"1. 삼성전자의 최근 AI 투자 관련 소식 알려줘",
-                       "2. SK하이닉스의 HBM 사업 관련 기사 찾아줘",
-                       "3. 네이버 실적 전망에 대한 뉴스 알려줘",
-                       "4. 카카오의 신규 사업 관련 기사 찾아줘",
-                       "5. LG에너지솔루션 배터리 수주 관련 기사 알려줘",
-                       "6. 금리 인하 가능성에 대한 최근 기사 알려줘",
-                       "7. 환율 상승이 국내 증시에 미치는 영향 관련 뉴스 찾아줘",
-                       "8. 반도체 업황 회복 전망 기사 알려줘",
-                       "9. 미국 FOMC 결과와 관련된 기사 찾아줘",
-                       "10. 한국 경제성장률 전망 기사 알려줘",
-                       "11. 반도체 시장에서 가장 유리한 기업은 어디야?",
-                       "12. 최근 배터리 업계 분위기는 어때",
-                       "13. 요즘 국내 증시에 영향을 주는 주요 이슈는 뭐야",
-                       "14. AI 관련 수혜주로 언급되는 기업은 어디야?",
-                       "15. 반도체 기업들의 투자 계획은 어떤것같아?"
-                       }
-    test_model_name_list = ["BAAI/bge-m3", "nlpai-lab/KURE-v1", "Qwen/Qwen3-Embedding-0.6B"]

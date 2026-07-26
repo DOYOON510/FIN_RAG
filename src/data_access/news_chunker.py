@@ -4,6 +4,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from src.database.connect_postgres import PostgresDB
 from src.common.setup_log import SetupLogger
+from src.database.postgres_common import PostgresInsert, PostgresUpdate
 
 from src.data_access.news_repository import QuizNewsCleaner
 
@@ -14,23 +15,24 @@ class NewsChunker:
     t_vector_data에 저장하는 클래스
     """
 
-    def __init__(self, db):
-        self.db = db
+    def __init__(self):
+        self.db = PostgresDB()
         self.quiz_cleaner = QuizNewsCleaner()
         self.logger = SetupLogger.get_logger()
+        self.postgres_insert = PostgresInsert()
+        self.postgres_update = PostgresUpdate()
 
     def fetch_chunking_target_news(self) -> list[dict]:
         self.logger.info("청킹 대상 뉴스 조회 시작")
 
         with self.db.get_postgres_db() as session:
             query = text("""
-                         SELECT
-                             news_id,
-                             news_title,
-                             contents,
-                             category,
-                             published_date,
-                             url
+                         SELECT news_id,
+                                news_title,
+                                contents,
+                                category,
+                                published_date,
+                                url
                          FROM t_news_data
                          WHERE del_yn = FALSE
                            AND chunking_yn = FALSE
@@ -43,47 +45,6 @@ class NewsChunker:
 
             return news_rows
 
-    def update_del_yn_true(self, news_ids: list[int]) -> int:
-        if not news_ids:
-            self.logger.info("퀴즈 기사 없음 - del_yn 업데이트 생략")
-            return 0
-
-        with self.db.get_postgres_db() as session:
-            query = text("""
-                         UPDATE t_news_data
-                         SET del_yn = TRUE
-                         WHERE news_id = ANY(:news_ids)
-                         """)
-
-            result = session.execute(query, {"news_ids": news_ids})
-            session.commit()
-
-            updated_count = result.rowcount
-
-            self.logger.info(f"퀴즈 기사 del_yn 업데이트 완료 - {updated_count}건")
-
-            return updated_count
-
-    def update_chunking_yn_true(self, news_ids: list[int]) -> int:
-        if not news_ids:
-            self.logger.info("청킹 완료 뉴스 없음 - chunking_yn 업데이트 생략")
-            return 0
-
-        with self.db.get_postgres_db() as session:
-            query = text("""
-                         UPDATE t_news_data
-                         SET chunking_yn = TRUE
-                         WHERE news_id = ANY(:news_ids)
-                         """)
-
-            result = session.execute(query, {"news_ids": news_ids})
-            session.commit()
-
-            updated_count = result.rowcount
-
-            self.logger.info(f"chunking_yn 업데이트 완료 - {updated_count}건")
-
-            return updated_count
 
     def clean_text(self, text_value) -> str:
         if text_value is None:
@@ -180,6 +141,7 @@ class NewsChunker:
 
             result.append({
                 "chunking_id": f"{news_id}{idx + 1:02d}",
+                "news_id": news_id,
                 "chunking_index": idx + 1,
                 "news_title": title,
                 "category": row.get("category"),
@@ -191,44 +153,6 @@ class NewsChunker:
         self.logger.debug(f"news_id={news_id} 청킹 완료 - {len(result)}개")
 
         return result
-
-    def insert_vector_data(self, chunks: list[dict]) -> int:
-        if not chunks:
-            self.logger.info("저장할 청크 없음 - t_vector_data INSERT 생략")
-            return 0
-
-        with self.db.get_postgres_db() as session:
-            query = text("""
-                         INSERT INTO t_vector_data
-                         (
-                             chunking_id,
-                             chunking_index,
-                             news_title,
-                             category,
-                             published_date,
-                             url,
-                             chunking_text
-                         )
-                         VALUES
-                             (
-                                 :chunking_id,
-                                 :chunking_index,
-                                 :news_title,
-                                 :category,
-                                 :published_date,
-                                 :url,
-                                 :chunking_text
-                             )
-                         """)
-
-            result = session.execute(query, chunks)
-            session.commit()
-
-            inserted_count = result.rowcount
-
-            self.logger.info(f"t_vector_data INSERT 완료 - {inserted_count}건")
-
-            return inserted_count
 
     def run(
             self,
@@ -243,7 +167,12 @@ class NewsChunker:
         self.logger.info("퀴즈 기사 판별 시작")
         quiz_news_ids = self.quiz_cleaner.find_quiz_news_ids(news_rows)
 
-        deleted_count = self.update_del_yn_true(quiz_news_ids)
+        self.postgres_update.update_data_to_postgres(
+            "t_news_data",
+            quiz_news_ids,
+            "del_yn",
+            "True"
+        )
 
         quiz_news_id_set = set(quiz_news_ids)
 
@@ -280,21 +209,26 @@ class NewsChunker:
             chunked_news_ids.append(news_id)
 
         self.logger.info("t_vector_data INSERT 시작")
-        inserted_count = self.insert_vector_data(all_chunks)
+        self.postgres_insert.insert_data_to_postgres(
+            "t_vector_data",
+            all_chunks
+        )
 
         self.logger.info("chunking_yn 업데이트 시작")
-        updated_chunking_count = self.update_chunking_yn_true(chunked_news_ids)
+        self.postgres_update.update_data_to_postgres(
+            "t_news_data",
+            chunked_news_ids,
+            "chunking_yn",
+            "True"
+        )
 
         self.logger.info(
             f"""
 ==================== 뉴스 청킹 작업 완료 ====================
 전체 조회 뉴스 수          : {len(news_rows)}
 삭제 기사 수              : {len(quiz_news_ids)}
-삭제 del_yn 업데이트 수    : {deleted_count}
 청킹 대상 뉴스 수          : {len(target_news_rows)}
 생성된 청크 수             : {len(all_chunks)}
-t_vector_data INSERT 수    : {inserted_count}
-chunking_yn 업데이트 수    : {updated_chunking_count}
 ============================================================
 """
         )
@@ -302,19 +236,9 @@ chunking_yn 업데이트 수    : {updated_chunking_count}
         return all_chunks
 
 
-def execute():
-    """
-    뉴스 청킹 전체 프로세스를 실행한다.
-    """
-    db = PostgresDB()
-
-    chunker = NewsChunker(db=db)
-
+if __name__ == "__main__":
+    chunker = NewsChunker()
     chunker.run(
         chunk_size=500,
         chunk_overlap=100,
     )
-
-
-if __name__ == "__main__":
-    execute()

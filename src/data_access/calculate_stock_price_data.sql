@@ -59,7 +59,7 @@ SELECT
     stock_id,
     collect_id,
     source_type,
-    trade_date,
+    trade_date::date,
     ticker_name,
     ticker_code,
     open_price,
