@@ -133,8 +133,9 @@ class NewsCollectorConfig:
 
     MEDIA_DOMAINS = {
         "매일경제": "mk.co.kr",
-        "한국경제": "hankyung.com",
-        "국민일보": "kmib.co.kr"
+        # "한국경제": "hankyung.com",
+        "국민일보": "kmib.co.kr",
+        "연합뉴스": "yna.co.kr"
     }
 
     HEADERS = {
@@ -149,6 +150,7 @@ class NewsCollectorConfig:
         "매일경제": "M",
         "한국경제": "H",
         "국민일보": "K",
+        "연합뉴스": "Y"
     }
 
     ARTICLE_SELECTORS = {
@@ -169,6 +171,13 @@ class NewsCollectorConfig:
             "div.article_body",
             "div#article_body",
             "div.article-body",
+        ],
+        "연합뉴스": [
+            "article.story-news-article",
+            "div.story-news.article",
+            "div.story-news",
+            "div.story-news__article",
+            "div.article",
         ]
     }
 
@@ -195,5 +204,12 @@ class NewsCollectorConfig:
             "정치": "https://www.kmib.co.kr/rss/data/kmibPolRss.xml",
             "국제": "https://www.kmib.co.kr/rss/data/kmibIntRss.xml",
             "사회": "https://www.kmib.co.kr/rss/data/kmibSocRss.xml",
-        }
+        },
+        "연합뉴스": {
+            "정치": "https://www.yna.co.kr/rss/politics.xml",
+            "경제": "https://www.yna.co.kr/rss/economy.xml",
+            "사회": "https://www.yna.co.kr/rss/society.xml",
+            "세계": "https://www.yna.co.kr/rss/international.xml",
+            "산업": "https://www.yna.co.kr/rss/industry.xml",
+        },
     }
