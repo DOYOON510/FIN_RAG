@@ -11,7 +11,7 @@ import ollama
 from src.common.setup_log import SetupLogger
 from src.database.connect_postgres import PostgresDB
 
-OLLAMA_MODEL = "exaone3.5"  # 한국어 안정성/속도 균형 (대안: qwen2.5:7b, qwen2.5:14b)
+OLLAMA_MODEL = "qwen2.5:1.5b"  # 경량/고속, SQL 생성 성능 우수 (대안: gemma3:1b,qwen2.5:0.5b )
 DEFAULT_LIMIT = 20  # 쿼리에 LIMIT이 없을 때 강제로 붙이는 최대 행 수
 MAX_LIMIT = 100     # 허용하는 최대 행 수 (LLM이 큰 값을 써도 이 값으로 제한)
 
